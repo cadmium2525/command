@@ -2,6 +2,8 @@
 
 このプロジェクトはサーバー、データベース、認証、課金 API を使わない静的 Web ゲームです。`dist` フォルダーが公開物です。GitHub Pages のサブパスと共有 URL はビルド時に設定します。
 
+公開先は **https://cadmium2525.github.io/command/**、ソースは [cadmium2525/command](https://github.com/cadmium2525/command) です。`main` への push で自動テストとデプロイが実行されます。
+
 ## ローカル確認
 
 Node.js 22.12 以上を使います。
@@ -26,6 +28,8 @@ npm run preview -- --port 4173
 
 `.github/workflows/pages.yml` は `configure-pages` の `base_path` と `base_url` をそれぞれ `VITE_BASE_PATH`、`VITE_PUBLIC_URL` へ渡します。リポジトリ名を変更しても同じ設定を使えます。プルリクエストとデフォルト以外のブランチではテストとビルドのみ実行します。個人用アクセストークンをソースコードに保存する必要はありません。
 
+`configure-pages` の `base_path` は `/command` のように末尾の `/` を含みません。Vite 設定で `/command/` に正規化してから渡し、画像と Service Worker の URL が `/command/assets/...` と `/command/sw.js` になることを回帰テストで確認します。共有 URL も末尾 `/` を含む正規 URL にそろえます。
+
 GitHub CLI を使用する場合の例です。`OWNER` は自分のアカウント名へ置き換えます。既存リポジトリへ公開する場合は新規作成を省略してください。
 
 ```powershell
@@ -45,14 +49,14 @@ gh workflow run pages.yml
 GitHub Actions 以外でビルドする場合の PowerShell 例です。URL は実際の公開先に合わせます。
 
 ```powershell
-$env:VITE_BASE_PATH = '/secret-start/'
-$env:VITE_PUBLIC_URL = 'https://OWNER.github.io/secret-start/'
+$env:VITE_BASE_PATH = '/command/'
+$env:VITE_PUBLIC_URL = 'https://cadmium2525.github.io/command/'
 npm run build
 node scripts/verify-build.mjs
 npm run preview -- --port 4173
 ```
 
-`http://127.0.0.1:4173/secret-start/` を開き、画像、音、図鑑が表示されることを確認します。確認後は必要に応じて環境変数を解除します。
+`http://127.0.0.1:4173/command/` を開き、画像、音、図鑑が表示されることを確認します。確認後は必要に応じて環境変数を解除します。
 
 ```powershell
 Remove-Item Env:VITE_BASE_PATH -ErrorAction SilentlyContinue
@@ -72,9 +76,9 @@ Remove-Item Env:VITE_PUBLIC_URL -ErrorAction SilentlyContinue
 
 ## この納品時の公開状況
 
-2026 年 10 月 23 日時点で GitHub CLI の既存認証トークンが無効であることを確認しました。連携のプロフィール参照は利用できましたが、リポジトリ新規作成と Pages 設定の操作は利用できませんでした。公開リポジトリと Pages URL はこの作業では作成していません。上記 workflow と公開手順を同梱しています。
+2026 年 10 月 23 日、ユーザーが用意した公開リポジトリ `cadmium2525/command` へ完成版を push し、GitHub Pages の公開元を GitHub Actions に設定しました。ホスト環境の GitHub CLI 認証を利用して、初回の build と deploy が成功したことを確認しています。以前の制限環境での認証確認では接続を判定できませんでしたが、ホスト環境での認証は有効でした。
 
-ローカル検証の実施結果は [test-plan.md](test-plan.md) に記録します。GitHub Pages の公開先での確認は公開後に実施してください。
+ローカルと公開先の検証結果は [test-plan.md](test-plan.md) に記録します。
 
 ## 公式資料
 

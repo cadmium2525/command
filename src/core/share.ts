@@ -1,8 +1,7 @@
 import type { SaveData } from '../data/types';
 export function publicUrl(): string {
   const configured = import.meta.env?.VITE_PUBLIC_URL;
-  if (configured) return new URL(configured).href;
-  const url = new URL(window.location.href);
+  const url = new URL(configured || window.location.href);
   url.hash = ''; url.search = '';
   if (!url.pathname.endsWith('/') && !url.pathname.endsWith('.html')) url.pathname += '/';
   return url.href;

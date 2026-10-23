@@ -8,7 +8,7 @@ import { SAVE_KEY } from '../src/core/storage';
 
 // A real static server under a Pages-style project subpath. Never uses Vite's SPA fallback.
 const root=resolve('dist');
-const mount='/secret-start/';
+const mount=process.env.BROWSER_TEST_MOUNT || '/secret-start/';
 const mime:Record<string,string>={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css','.webp':'image/webp','.svg':'image/svg+xml'};
 const server=createServer(async(req,res)=>{
   try{
@@ -21,10 +21,13 @@ const server=createServer(async(req,res)=>{
     res.writeHead(200,{'content-type':mime[extname(file)]||'application/octet-stream','cache-control':'no-store'});res.end(data);
   }catch{res.writeHead(404);res.end();}
 });
-await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));
-const address=server.address();
-if(!address||typeof address==='string')throw new Error('server address');
-const url=`http://127.0.0.1:${address.port}${mount}`;
+let url=process.env.BROWSER_TEST_URL || '';
+if(!url){
+  await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));
+  const address=server.address();
+  if(!address||typeof address==='string')throw new Error('server address');
+  url=`http://127.0.0.1:${address.port}${mount}`;
+}
 const channel=process.env.PLAYWRIGHT_CHANNEL;
 let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
 const results:{name:string;status:string}[]=[];
@@ -217,4 +220,4 @@ try{
   assert.deepEqual(errors,[]);assert.deepEqual(failedRequests,[]);
   await writeFile('.qa/browser-results.json',JSON.stringify({url,channel:channel||'chromium',results,errors,failedRequests},null,2));
   console.log(`Browser checks: ${results.length}/${results.length} PASS; zero script errors or project 404s.`);
-}finally{await browser?.close();await new Promise<void>(r=>server.close(()=>r()));}
+}finally{await browser?.close();if(server.listening)await new Promise<void>(r=>server.close(()=>r()));}

@@ -4,6 +4,8 @@
 
 ゲーム本体は TypeScript・Vite・Canvas 2D で実装しています。サーバー側処理、ログイン、データベース、有料API、外部フォントは不要です。
 
+**[ブラウザで遊ぶ](https://cadmium2525.github.io/command/)** · [公開リポジトリ](https://github.com/cadmium2525/command)
+
 ## 起動する
 
 Node.js 22.12 以上を用意し、このフォルダーで実行します。
@@ -93,7 +95,7 @@ scripts/        オフライン生成、ビルド検証、ブラウザ検証
 
 ## 公開と資料
 
-GitHub Pages 用の workflow を同梱しています。公開の操作、サブパス設定、共有URL、公開後の確認は [公開手順](docs/deployment.md) を参照してください。この納品時点では公開先を作成していません。GitHub認証の状況も同資料に記載しています。
+GitHub Pages で公開し、`main` への push でテストと再公開が動くよう設定しています。公開の操作、サブパス設定、共有URL、確認結果は [公開手順](docs/deployment.md) と [検証記録](docs/test-plan.md) を参照してください。
 
 - [ゲーム設計](docs/game-design.md)
 - [テスト計画・検証結果](docs/test-plan.md)
