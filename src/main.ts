@@ -1,334 +1,139 @@
 import './ui/styles.css';
-import { EVENTS, COMMANDS, EVENT_BY_ID, EVENT_BY_COMMAND, TRUE_ENDING } from './data/catalog';
-import { CATEGORY_LABELS, SYMBOLS, SYMBOL_LABELS, displayCommand } from './data/types';
+import './ui/console-only.css';
+import { EVENTS, COMMANDS, EVENT_BY_ID, TRUE_ENDING } from './data/catalog';
+import { CATEGORY_LABELS, SYMBOL_LABELS, displayCommand } from './data/types';
 import type { GameEvent, InputSymbol, SaveData } from './data/types';
 import { createEmptySave, normalizeSave, recordAttempt, progress, toggleFavorite, mergeSaves } from './core/state';
 import { browserStorage, loadSave, persistSave, SAVE_KEY, RECOVERY_KEY } from './core/storage';
 import { AudioEngine } from './core/audio';
 import { shareUrl } from './core/share';
 import { ScenePlayer, drawTitle } from './events/player';
+import { ACTOR_NAMES as names } from './events/art';
 
-type View = 'home' | 'library' | 'explorer' | 'settings' | 'help' | 'playing';
-type Playback = { event: GameEvent | null; isNew: boolean; source: 'command' | 'library' | 'completion'; command: string };
-const app = document.querySelector<HTMLDivElement>('#app')!;
-const storage = browserStorage();
-const loaded = loadSave(storage);
-let save = loaded.data;
-let warning = loaded.warning;
-let view: View = 'home';
-let inputs: InputSymbol[] = [];
-let message = '';
-let active: Playback | null = null;
-let player: ScenePlayer | null = null;
-let titleCleanup: (() => void) | null = null;
-let timer: ReturnType<typeof setTimeout> | null = null;
-let search = '';
-let category = 'all';
-let favoritesOnly = false;
-let resetStep = 0;
-let lastFocus: HTMLElement | null = null;
-const audio = new AudioEngine();
-const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-const reducedMotion = () => motionQuery.matches || save.settings.reducedMotion;
-const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]!));
-const icon = (kind: string) => {
-  const paths: Record<string,string> = {
-    sound:'<path d="M11 4 6 8H3v8h3l5 4z"/><path d="M15 8c3 2 3 6 0 8m3-11c5 4 5 10 0 14"/>',
-    muted:'<path d="M11 4 6 8H3v8h3l5 4z"/><path d="m16 9 6 6m0-6-6 6"/>',
-    settings:'<path d="m9 3-1 3-3 1-2 4 2 3 1 3 4 2 3-1 3-1 2-4-1-3-1-3-4-1z"/><circle cx="11" cy="11" r="3"/>',
-    book:'<path d="M12 5C8 3 5 3 2 4v15c4-1 7-1 10 1 3-2 6-2 10-1V4c-3-1-6-1-10 1zm0 0v15"/>',
-    grid:'<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>',
-    lock:'<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><path d="M12 14v3"/>',
-    back:'<path d="m10 5-7 7 7 7m-7-7h18"/>',
-    undo:'<path d="m8 5-6 5 6 5m-6-5h12a6 6 0 0 1 0 12"/>',
-    delete:'<path d="M8 5h13v14H8L2 12zm5 4 5 6m0-6-5 6"/>',
-    play:'<path d="m7 3 14 9-14 9z"/>',
-    help:'<circle cx="12" cy="12" r="9"/><path d="M9 9a3 3 0 1 1 5 2c-2 1-2 2-2 3m0 3v.1"/>',
-    x:'<path d="m4 3 16 18H16L1 3zm16 0L4 21"/>',
-  };
-  return `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[kind] || paths.help}</svg>`;
-};
-
-function persist() {
-  const result = persistSave(storage, save);
-  warning = result.warning;
-  audio.muted = save.settings.muted;
-  document.documentElement.classList.toggle('reduce-motion', reducedMotion());
+type Modal = 'library'|'explorer'|'progress'|'settings'|'help'|'admin'|'transcript';
+type Playback = {event:GameEvent|null;isNew:boolean;source:'command'|'library'|'completion'|'admin';command:string;returnModal?:Modal};
+const app=document.querySelector<HTMLDivElement>('#app')!;
+const storage=browserStorage(),loaded=loadSave(storage);
+let save=loaded.data,warning=loaded.warning;
+let inputs:InputSymbol[]=[],message='';
+let active:Playback|null=null,player:ScenePlayer|null=null,titleCleanup:(()=>void)|null=null;
+let timer:ReturnType<typeof setTimeout>|null=null,playbackComplete=false;
+let activeModal:Modal|null=null,modalPushed=false,modalFocus:HTMLElement|null=null,resetFocus:HTMLElement|null=null,resetStep=0;
+let search='',category='all',favoritesOnly=false;
+const ADMIN_KEY='secret-start.admin-preview';
+let adminEnabled=true;
+try{adminEnabled=storage?.getItem(ADMIN_KEY)!=='off';}catch{}
+const audio=new AudioEngine(),motionQuery=matchMedia('(prefers-reduced-motion: reduce)');
+const reducedMotion=()=>motionQuery.matches||save.settings.reducedMotion;
+const esc=(s:string)=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
+const titles:Record<Modal,string>={library:'ひみつ図鑑',explorer:'探索一覧',progress:'探索の記録',settings:'設定',help:'遊び方',admin:'管理者モード',transcript:'セリフを読み返す'};
+function icon(kind:string){
+  const paths:Record<string,string>={sound:'<path d="M11 4 6 8H3v8h3l5 4zM15 8c3 2 3 6 0 8m3-11c5 4 5 10 0 14"/>',muted:'<path d="M11 4 6 8H3v8h3l5 4zM16 9l6 6m0-6-6 6"/>',settings:'<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/>',book:'<path d="M12 5C8 3 5 3 2 4v15c4-1 7-1 10 1 3-2 6-2 10-1V4c-3-1-6-1-10 1zm0 0v15"/>',grid:'<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>',progress:'<path d="M4 20V12h4v8m3 0V7h4v13m3 0V3h3v17M2 21h21"/>',admin:'<path d="m8 4-6 8 6 8m8-16 6 8-6 8m-3-17-2 18"/>',undo:'<path d="m8 5-6 5 6 5m-6-5h12a6 6 0 0 1 0 12"/>',delete:'<path d="M8 5h13v14H8L2 12zm5 4 5 6m0-6-5 6"/>',play:'<path d="m7 3 14 9-14 9z"/>',close:'<path d="m5 5 14 14m0-14L5 19"/>',x:'<path d="m4 3 16 18H16L1 3zm16 0L4 21"/>'};
+  return `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[kind]||paths.book}</svg>`;
 }
-function cleanup() {
-  player?.dispose(); player = null;
-  titleCleanup?.(); titleCleanup = null;
-  if (timer !== null) { clearTimeout(timer); timer = null; }
-  audio.stop();
+function persist(){warning=persistSave(storage,save).warning;audio.muted=save.settings.muted;document.documentElement.classList.toggle('reduce-motion',reducedMotion());}
+function cleanup(){player?.dispose();player=null;titleCleanup?.();titleCleanup=null;if(timer!==null){clearTimeout(timer);timer=null;}audio.stop();}
+function announce(text:string){message=text;const el=document.querySelector('#console-notice');if(el)el.textContent=warning||message||'SYSTEM READY / 3つの入力を待っています';}
+function share(){return `<a class="share-link" href="${esc(shareUrl(save))}" target="_blank" rel="noopener noreferrer" data-share="true">${icon('x')}発見をシェアする ↗</a>`;}
+function navigation(){return `<nav class="console-menu" aria-label="ゲーム機のメニュー">${(['library','explorer','progress','settings','admin'] as Modal[]).map((key,i)=>`<button data-modal="${key}" aria-haspopup="dialog" aria-controls="info-dialog" aria-label="${titles[key]}を開く">${icon(['book','grid','progress','settings','admin'][i])}<span>${['図鑑','探索','記録','設定','管理'][i]}</span></button>`).join('')}</nav>`;}
+function slots(){const value=active?.command?[...active.command] as InputSymbol[]:inputs;return [0,1,2].map((_,i)=>`<span class="command-slot ${value[i]?'':'empty'} ${!active&&inputs.length===i?'current':''}">${value[i]?SYMBOL_LABELS[value[i]]:'·'}</span>`).join('');}
+function controls(){return `<div class="command-row"><span class="command-label mono">YOUR COMMAND<br><small><span id="input-count">${active?.command?3:inputs.length}</span> / 3 INPUTS</small></span><div id="command-slots" class="slots" role="group" aria-label="コマンド入力 3枠">${slots()}</div><button class="slot-back" data-action="delete" aria-label="1文字戻す" ${active?'disabled':''}>${icon('delete')}</button></div><div class="controller"><div class="dpad" role="group" aria-label="方向ボタン"><button class="key up" data-symbol="U" aria-label="上">↑</button><button class="key left" data-symbol="L" aria-label="左">←</button><i class="dpad-center" aria-hidden="true"></i><button class="key right" data-symbol="R" aria-label="右">→</button><button class="key down" data-symbol="D" aria-label="下">↓</button></div><div class="ab-wrap"><div class="ab-buttons" role="group" aria-label="アクションボタン"><button class="key round-key b" data-symbol="B" aria-label="B">B</button><button class="key round-key" data-symbol="A" aria-label="A">A</button></div><span class="ab-caption mono">${active&&active.event?.category!=='minigame'?'A / → 次へ　B / ← 戻る':'FOLLOW YOUR CURIOSITY'}</span></div></div><div class="start-row"><button class="clear-button" data-action="${active?'skip':'clear'}">${icon('undo')}${active?'スキップ':'入力をリセット'}</button><button id="start-button" class="start-button" data-action="${active?'advance':'start'}" ${!active&&inputs.length!==3?'disabled':''}>${icon('play')}<span>${active?(active.event?.category==='minigame'?'決定':'次へ'):'START'}</span></button></div>`;}
+function renderGame(){
+  cleanup();audio.muted=save.settings.muted;document.documentElement.classList.toggle('reduce-motion',reducedMotion());
+  const event=active?.event;
+  const overlay=!active?'<div class="title-overlay"><span class="screen-kicker mono">THERE IS ALWAYS ANOTHER WAY</span><h1 class="screen-title">SECRET<span>START</span></h1><span class="screen-subtitle mono">3 INPUTS. A WHOLE NEW WORLD.</span><span class="screen-prompt mono">▸ ENTER YOUR SECRET</span><span class="screen-copyright mono">© 2026 SECRET START</span></div>':'<div class="anticipation" id="anticipation">OPENING . . .</div>';
+  app.innerHTML=`<main class="console-page" id="main-content"><section class="console" aria-label="SECRET START ゲーム機"><div class="console-top"><span><i class="dot led"></i>SECRET START SYSTEM</span><button class="console-sound" data-action="sound" aria-label="${save.settings.muted?'音をオンにする':'音をオフにする'}" aria-pressed="${!save.settings.muted}">${icon(save.settings.muted?'muted':'sound')}</button></div><div class="screen-bezel"><div class="screen"><canvas id="game-canvas" width="320" height="200" role="img" aria-label="${event?esc(event.title):'星空と秘密の扉のタイトル画面'}"></canvas>${overlay}</div></div>${active?`<section class="scene-dialogue" aria-label="演出のセリフ"><div class="scene-heading"><h1 class="playing-title">${event?esc(event.title):'何も起こらない？'}</h1><span id="scene-beat-count" class="mono"></span></div><p id="scene-cast" class="scene-cast"></p><p id="scene-narration" class="scene-narration" aria-live="polite" aria-atomic="true">${event?'世界をひらいています。':'何も起こらなかった。このコマンドは空振りでした。'}</p><p id="scene-detail" class="scene-detail" aria-live="polite"></p><div class="story-tools"><button data-action="transcript" aria-haspopup="dialog">セリフを読み返す</button><span id="reading-status">${event?.category==='minigame'?'下のボタンで操作できます。':'セリフは「次へ」でも進められます。'}</span></div><div class="play-progress" role="progressbar" aria-label="演出の再生状況" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="play-progress"></span></div></section>`:`<div class="screen-status mono"><span id="console-notice" role="status" aria-live="polite">${esc(warning||message||'SYSTEM READY / 3つの入力を待っています')}</span><span class="signal" aria-hidden="true"><i></i><i></i><i></i></span></div>`}${controls()}${navigation()}<div class="console-bottom mono"><span>CURIOUS MINDS ONLY.</span><span class="speaker" aria-hidden="true">${'<i></i>'.repeat(7)}</span></div><span id="input-live" class="screen-reader-only" aria-live="polite" aria-atomic="true"></span></section></main><dialog id="info-dialog" class="info-dialog" aria-labelledby="modal-title"></dialog><dialog id="confirm-dialog" aria-labelledby="dialog-title"><h2 id="dialog-title"></h2><p id="dialog-description"></p><div class="dialog-actions"><button class="small-button" data-action="reset-cancel">やめる</button><button class="small-button danger" data-action="reset-confirm" id="reset-confirm"></button></div></dialog>`;
+  document.querySelector<HTMLDialogElement>('#info-dialog')!.addEventListener('cancel',e=>{e.preventDefault();closeModal();});
+  if(!active)titleCleanup=drawTitle(document.querySelector('#game-canvas')!,reducedMotion());
 }
-function announce(text: string) {
-  message = text;
-  const el = document.querySelector('#notice');
-  if (el) el.textContent = text;
-  const warn = document.querySelector('#save-warning');
-  if (warn) { warn.textContent = warning || ''; (warn as HTMLElement).hidden = !warning; }
+function panelHead(title:string,description:string){return `<h2 class="panel-title">${title}</h2><p class="panel-sub">${description}</p>`;}
+function eventCards(admin=false){
+  const found=EVENTS.filter(e=>(admin||adminEnabled||save.discoveredEventIds.includes(e.eventId))&&(category==='all'||category===e.category)&&(!favoritesOnly||save.favoriteEventIds.includes(e.eventId))&&(!search||`${e.title} ${displayCommand(e.command)}`.toLowerCase().includes(search.toLowerCase())));
+  return found.length?found.map(e=>{const discovered=save.discoveredEventIds.includes(e.eventId);return `<article class="event-card"><span class="event-number">${discovered?'✓ 発見済み':'管理者プレビュー · 未発見'}</span><h3>${esc(e.title)}</h3><div class="event-command">${displayCommand(e.command)}</div><p class="event-meta">${CATEGORY_LABELS[e.category]}${e.category==='minigame'?' · 操作して遊べます':''}</p><div class="card-actions"><button class="small-button" data-replay="${e.eventId}" aria-label="${esc(e.title)}を再生">▶ ${e.category==='minigame'?'遊ぶ':'見る'}</button>${discovered?`<button class="favorite-button ${save.favoriteEventIds.includes(e.eventId)?'selected':''}" data-favorite="${e.eventId}" aria-pressed="${save.favoriteEventIds.includes(e.eventId)}" aria-label="${esc(e.title)}のお気に入り">${save.favoriteEventIds.includes(e.eventId)?'★':'☆'}</button>`:''}</div></article>`;}).join(''):'<p class="empty-state">この条件の演出は、まだ記録されていません。</p>';
 }
-function header() {
-  return `<header class="site-header"><button class="brand" data-action="home" aria-label="SECRET START タイトルに戻る"><span class="brand-icon" aria-hidden="true">S</span><span>SECRET START</span></button><div class="header-right"><span class="header-caption">タイトル画面に、まだ知らない世界。</span><span class="offline-label"><i class="dot"></i> SOLO EXPLORATION</span><button class="icon-button" data-action="sound" aria-label="${save.settings.muted ? '音をオンにする' : '音をオフにする'}" aria-pressed="${!save.settings.muted}">${icon(save.settings.muted ? 'muted' : 'sound')}</button><button class="icon-button" data-action="settings" aria-label="設定を開く">${icon('settings')}</button></div></header>`;
+function libraryContent(admin=false){
+  if(!admin&&!adminEnabled&&!progress(save).libraryUnlocked)return panelHead('ひみつ図鑑','5個の発見でひらきます。管理者モードでは今すぐ全演出を見られます。');
+  return `${panelHead(admin?'全演出プレビュー':'ひみつ図鑑',admin||adminEnabled?`全173演出を確認できます。実際の発見記録は ${save.discoveredEventIds.length} / 173 です。`:`見つけた ${save.discoveredEventIds.length} 個の世界を、もう一度。`)}<div class="filters"><input class="search-input" id="search" type="search" value="${esc(search)}" placeholder="演出の名前・コマンドで検索" aria-label="演出を検索"><select class="filter-select" id="category" aria-label="カテゴリで絞り込む"><option value="all">すべて</option>${Object.entries(CATEGORY_LABELS).map(([k,v])=>`<option value="${k}" ${category===k?'selected':''}>${v}</option>`).join('')}</select><label class="filter-check"><input type="checkbox" id="favorites-only" ${favoritesOnly?'checked':''}>★ お気に入り</label></div><div id="library-cards" class="library-grid">${eventCards(admin)}</div>`;
 }
-function footer() {
-  return '<footer class="footer"><span>© 2026 SECRET START &nbsp; / &nbsp; A LITTLE GAME ABOUT CURIOSITY.</span><span>3 INPUTS. 216 POSSIBILITIES. 173 SECRETS.</span></footer>';
+function explorerContent(){
+  if(!adminEnabled&&!progress(save).explorerUnlocked)return panelHead('探索一覧','87個の発見でひらきます。');
+  return `${panelHead('探索一覧',adminEnabled?'管理者モード：内容も表示しています。選ぶと入力欄にセットします。':'？ 未入力 ／ ✓ 発見済み ／ — 空振り。選ぶと入力欄にセットします。')}<div class="explorer-grid">${COMMANDS.map(c=>{const attempted=save.attemptedCommands.includes(c.command),found=attempted&&!!c.eventId,result=!attempted?'未入力':found?'発見済み':'空振り',title=adminEnabled?(c.eventId?EVENT_BY_ID.get(c.eventId)!.title:'空振り'):'';return `<button class="explorer-cell ${found?'found':attempted?'miss':''}" data-command="${c.command}" aria-label="${displayCommand(c.command)} ${esc(title||result)} 入力欄にセット">${displayCommand(c.command)}<small>${found?'✓':attempted?'—':'？'} ${result}</small>${title?`<span class="explorer-title">${esc(title)}</span>`:''}</button>`;}).join('')}</div>`;
 }
-function share(className = '') {
-  return `<a class="share-link ${className}" href="${esc(shareUrl(save))}" target="_blank" rel="noopener noreferrer" data-share="true">${icon('x')}<span>発見をシェアする</span><span aria-hidden="true">↗</span></a>`;
+function progressContent(){const p=progress(save);return `${panelHead('探索の記録','プレビューでは、この発見数は増えません。')}<div class="progress-count mono">${p.discovered}<small>/ 173</small></div><div class="progress-caption"><span>見つけたひみつ</span><span>${p.percent}%</span></div><div class="progress-track" role="progressbar" aria-label="発見の進み具合" aria-valuemin="0" aria-valuemax="173" aria-valuenow="${p.discovered}"><span style="width:${p.percent}%"></span></div><div class="discovery-grid" aria-hidden="true">${EVENTS.map(e=>`<i class="discovery-dot ${save.discoveredEventIds.includes(e.eventId)?'found':''}"></i>`).join('')}</div><p class="panel-sub">入力済み ${p.attempted} / 216 コマンド</p>${warning?`<p class="save-warning">${esc(warning)}</p>`:''}<div class="settings-actions">${share()}${p.complete?'<button class="small-button" data-action="completion">真エンディングを見る</button>':''}<button class="small-button" data-modal="help">遊び方</button></div>`;}
+function settingsContent(){
+  const rows=[['muted','音を消す','小さな電子音の消音。'],['reducedMotion','動きを控えめに','揺れや回転を控えめにします。端末の設定も反映します。'],['autoSkip','発見済みを自動スキップ','コマンドの再入力だけに適用。図鑑・プレビューは再生します。']] as const;
+  return `${panelHead('設定','演出の最後は、読み終えてから自分で戻れます。')}<div class="settings-list">${rows.map(([key,title,desc])=>`<div class="setting-row"><div class="setting-copy"><strong id="${key}-label">${title}</strong><p id="${key}-description">${desc}</p></div><label class="switch"><input type="checkbox" role="switch" data-setting="${key}" aria-labelledby="${key}-label" aria-describedby="${key}-description" ${save.settings[key]?'checked':''}></label></div>`).join('')}<div class="settings-actions"><button class="small-button" data-action="export">記録を書き出す ↓</button><button class="small-button" data-action="import">記録を読み込む ↑</button><input type="file" id="import-file" accept="application/json,.json" hidden><button class="small-button danger" data-action="reset">記録をすべて消去</button><button class="small-button" data-modal="help">遊び方</button></div><p class="settings-footnote">記録はこのブラウザに保存されます。ブラウザのデータ消去で失われる場合があるため、書き出して保管できます。</p>${warning?`<p class="save-warning">${esc(warning)}</p>`:''}</div>`;
 }
-function aside() {
-  const p = progress(save);
-  const hint = p.complete ? 'すべてのひみつが、あなたのものに。' : p.explorerUnlocked ? '探索一覧がひらきました。まだ見ぬコマンドを探してみよう。' : p.libraryUnlocked ? '図鑑を読み返すと、次のひみつが見えてくるかも。' : `あと${5-p.discovered}個の発見で、ひみつ図鑑がひらきます。`;
-  return `<aside class="game-aside" aria-label="探索状況"><section class="progress-panel"><div class="aside-top"><span class="eyebrow">YOUR DISCOVERIES</span><span class="tiny-tag">${p.complete ? 'COMPLETE' : 'IN PROGRESS'}</span></div><div class="progress-count mono">${String(p.discovered).padStart(3,'0')}<small>/ 173</small></div><div class="progress-caption"><span>見つけたひみつ</span><span class="mono">${p.percent}%</span></div><div class="progress-track" role="progressbar" aria-label="発見の進み具合" aria-valuemin="0" aria-valuemax="173" aria-valuenow="${p.discovered}"><span style="width:${p.percent}%"></span></div><div class="discovery-grid" aria-hidden="true">${EVENTS.map(e=>`<i class="discovery-dot ${save.discoveredEventIds.includes(e.eventId)?'found':''}"></i>`).join('')}</div><p class="aside-message">${hint}</p><div class="attempt-stat"><span>入力したコマンド</span><strong class="mono">${String(p.attempted).padStart(3,'0')} / 216</strong></div></section><nav class="side-nav" aria-label="ゲームメニュー"><button class="side-button ${p.libraryUnlocked?'':'locked'}" data-action="library" aria-label="ひみつ図鑑${p.libraryUnlocked?'':' 5発見で解禁'}"><span class="nav-icon">${icon(p.libraryUnlocked?'book':'lock')}</span><span class="nav-text"><strong>ひみつ図鑑</strong><small>${p.libraryUnlocked ? `${p.discovered}個のひみつを記録済み` : '5個の発見でアンロック'}</small></span><span class="arrow">↗</span></button><button class="side-button ${p.explorerUnlocked?'':'locked'}" data-action="explorer" aria-label="探索一覧${p.explorerUnlocked?'':' 87発見で解禁'}"><span class="nav-icon">${icon(p.explorerUnlocked?'grid':'lock')}</span><span class="nav-text"><strong>探索一覧</strong><small>${p.explorerUnlocked ? '216個の入力結果を確認' : '87個の発見でアンロック'}</small></span><span class="arrow">↗</span></button></nav><div class="note"><span class="eyebrow">A SMALL HINT</span><p>上に行きたいときは、上へ。<br>同じボタンを3回押したら、<br>何かが起こるかもしれない。</p></div>${p.complete ? '<p class="complete-badge">✦ 173 / 173 ALL SECRETS FOUND<br><button class="text-link" data-action="completion">真エンディングをもう一度</button></p>' : ''}${p.libraryUnlocked ? share('aside-share') : ''}</aside>`;
+function adminContent(){const games=EVENTS.filter(e=>e.mechanic==='invaders'||e.mechanic==='blocks');return `${panelHead('管理者モード','全173演出と真エンディングを、収集状況に関係なく確認できます。')}<div class="setting-row"><div class="setting-copy"><strong id="admin-label">すべての演出を表示</strong><p>初期ON。実際の収集記録は書き換えません。</p></div><label class="switch"><input id="admin-toggle" type="checkbox" role="switch" aria-labelledby="admin-label" ${adminEnabled?'checked':''}></label></div>${adminEnabled?`<div class="settings-actions">${games.map(e=>`<button class="small-button" data-replay="${e.eventId}">▶ ${esc(e.title)}</button>`).join('')}<button class="small-button" data-action="preview-ending">真エンディングを確認</button></div>${libraryContent(true)}`:'<p class="panel-sub">OFFの間は、通常の解禁条件に戻ります。</p>'}`;}
+function helpContent(){return `${panelHead('遊び方','↑ ↓ ← → A B を3回押して START。')}<div class="help-content"><p>同じボタンの連続入力もできます。入力は常に3文字。1字戻す、入力リセットでやり直せます。</p><p>216通りに173種類のひみつと43の空振り。通常モードでは5発見で図鑑、87発見で探索一覧がひらきます。</p><p>セリフの長さに合わせて進みます。A・→・STARTで次へ、B・←で前へ。最後は「読み終えた・戻る」を押すまで読めます。「セリフを読み返す」で台本も開けます。</p><p>インベーダー風は←→で移動・Aで発射。落ちものブロックは←→で移動・↑/Aで回転・↓で落下・Bで一気に落とします。他のミニゲームも画面の説明に従って遊べます。</p><p>キーボードの矢印と A・B、Enter、Backspace、Deleteに対応。Escapeはモーダルを閉じる／演出スキップです。</p><p>管理者モードは初期ON。プレビューを見ても収集記録は増えません。</p></div>`;}
+function transcriptContent(){return `${panelHead(active?.event?.title||'セリフの履歴','読み終えたら閉じて、演出に戻れます。')}<ol class="transcript">${active?.event?.timeline.map((beat,i)=>`<li ${i===player?.currentBeatIndex?'aria-current="step"':''}><span>${i+1}</span><p>${esc(beat.text)}</p></li>`).join('')||'<li>何も起こらなかった。このコマンドは空振りでした。</li>'}</ol>`;}
+function fillModal(){if(!activeModal)return;const content=activeModal==='library'?libraryContent():activeModal==='explorer'?explorerContent():activeModal==='progress'?progressContent():activeModal==='settings'?settingsContent():activeModal==='help'?helpContent():activeModal==='admin'?adminContent():transcriptContent();document.querySelector<HTMLDialogElement>('#info-dialog')!.innerHTML=`<div class="modal-header"><h1 id="modal-title">${titles[activeModal]}</h1><button class="modal-close" data-action="close-modal" aria-label="モーダルを閉じる">${icon('close')}</button></div><div id="modal-notice" class="modal-notice" role="status"></div><div class="modal-content">${content}</div>`;}
+function openModal(kind:Modal,push=true){const dialog=document.querySelector<HTMLDialogElement>('#info-dialog')!;if(!dialog.open)modalFocus=document.activeElement as HTMLElement;activeModal=kind;fillModal();if(!dialog.open){dialog.showModal();if(push){history.pushState({modal:kind},'',`#${kind}`);modalPushed=true;}}else if(push)history.replaceState({modal:kind},'',`#${kind}`);player?.pause(true);audio.stop();document.querySelector<HTMLButtonElement>('.modal-close')?.focus();}
+function closeModal(updateHistory=true){document.querySelector<HTMLDialogElement>('#info-dialog')?.close();activeModal=null;if(updateHistory){if(modalPushed)history.back();else history.replaceState(null,'','#home');}modalPushed=false;player?.pause(document.hidden);if(modalFocus?.isConnected)modalFocus.focus({preventScroll:true});}
+function syncInputs(){document.querySelector('#command-slots')!.innerHTML=slots();document.querySelector('#input-count')!.textContent=String(inputs.length);document.querySelector<HTMLButtonElement>('#start-button')!.disabled=inputs.length!==3;document.querySelector('#input-live')!.textContent=inputs.length?`入力 ${displayCommand(inputs.join(''))}。${inputs.length} / 3`:'入力を消しました。';}
+function input(symbol:InputSymbol){audio.unlock();if(active){if(playbackComplete)return;if(active.event?.category==='minigame')player?.input(symbol);else if(symbol==='A'||symbol==='R')player?.nextBeat();else if(symbol==='B'||symbol==='L')player?.previousBeat();audio.play('input');return;}if(inputs.length===3)return;inputs.push(symbol);audio.play('input');syncInputs();}
+function start(){if(active||inputs.length!==3)return;const command=inputs.join(''),result=recordAttempt(save,command);save=result.save;persist();if(result.event&&!result.isNew&&save.settings.autoSkip){inputs=[];renderGame();announce('発見済みの演出を自動スキップしました。');return;}begin({event:result.event||null,isNew:result.isNew,source:'command',command});}
+function begin(playback:Playback){
+  if(activeModal){document.querySelector<HTMLDialogElement>('#info-dialog')?.close();activeModal=null;modalPushed=false;history.replaceState(null,'','#home');}
+  active=playback;inputs=[];playbackComplete=false;message='';renderGame();audio.play('start');const token=active;
+  timer=setTimeout(()=>{timer=null;if(active!==token)return;document.querySelector('#anticipation')?.remove();const canvas=document.querySelector<HTMLCanvasElement>('#game-canvas')!;
+    if(!playback.event){titleCleanup=drawTitle(canvas,true);audio.play('miss');showPlaybackEnd();return;}
+    if(playback.isNew)audio.play('new');
+    player=new ScenePlayer(canvas,playback.event,{reducedMotion:reducedMotion(),onBeat:(beat,index)=>{
+      const line=document.querySelector('#scene-narration');if(line)line.textContent=beat.text;
+      const count=document.querySelector('#scene-beat-count');if(count)count.textContent=`${index+1} / ${playback.event!.timeline.length}`;
+      const cast=document.querySelector('#scene-cast');if(cast)cast.textContent=`${names[beat.actor||playback.event!.actor]} ＋ ${names[beat.prop||playback.event!.prop]}`;
+    },onProgress:(p,detail)=>{const bar=document.querySelector<HTMLElement>('#play-progress');if(bar){const value=Math.round(p*100);bar.style.width=`${value}%`;bar.parentElement!.setAttribute('aria-valuenow',String(value));}const line=document.querySelector('#scene-detail');if(line&&playback.event?.category==='minigame'&&line.textContent!==detail)line.textContent=detail;},onComplete:showPlaybackEnd});
+    if(activeModal||document.hidden)player.pause(true);
+  },reducedMotion()?120:350);
+  document.querySelector<HTMLButtonElement>('#start-button')?.focus({preventScroll:true});
 }
-function speaker() { return `<span class="speaker" aria-hidden="true">${'<i></i>'.repeat(7)}</span>`; }
-function slots() { return [0,1,2].map((_,i)=>`<span class="command-slot ${inputs[i]?'':'empty'} ${inputs.length===i?'current':''}">${inputs[i]?SYMBOL_LABELS[inputs[i]]:'·'}</span>`).join(''); }
-function controls() {
-  return `<div class="command-row"><span class="command-label mono">YOUR COMMAND<br><small><span id="input-count">${inputs.length}</span> / 3 INPUTS</small></span><div id="command-slots" class="slots" role="group" aria-label="コマンド入力 3枠">${slots()}</div><button class="slot-back" data-action="delete" aria-label="1文字戻す">${icon('delete')}</button></div><div class="controller"><div class="dpad" role="group" aria-label="方向ボタン"><button class="key up" data-symbol="U" aria-label="上">↑</button><button class="key left" data-symbol="L" aria-label="左">←</button><i class="dpad-center" aria-hidden="true"></i><button class="key right" data-symbol="R" aria-label="右">→</button><button class="key down" data-symbol="D" aria-label="下">↓</button></div><div class="ab-wrap"><div class="ab-buttons" role="group" aria-label="アクションボタン"><button class="key round-key b" data-symbol="B" aria-label="B">B</button><button class="key round-key" data-symbol="A" aria-label="A">A</button></div><span class="ab-caption mono">FOLLOW YOUR CURIOSITY</span></div></div><div class="start-row"><button class="clear-button" data-action="clear">${icon('undo')}入力をリセット</button><button id="start-button" class="start-button" data-action="start" ${inputs.length!==3?'disabled':''}>${icon('play')}START</button></div>`;
-}
-function homeContent() {
-  return `<section class="intro"><div><div class="eyebrow">AN UNEXPECTED ADVENTURE / NO. 001</div><h1>ひみつを、起動しよう。</h1></div><p>↑ ↓ ← → A B。好きなボタンを3回。<br>STARTの先に、何が待っているだろう。</p></section><div class="game-layout"><div class="game-main"><section class="console" aria-label="SECRET START ゲーム機"><div class="console-top"><span><i class="dot led"></i>SECRET START SYSTEM</span><span class="console-id mono">SS–001</span></div><div class="screen-bezel"><div class="screen"><canvas id="game-canvas" width="320" height="200" role="img" aria-label="星空の下、ひみつの扉があるピクセルアートのタイトル画面"></canvas><div class="title-overlay"><span class="screen-kicker mono">THERE IS ALWAYS ANOTHER WAY</span><div class="screen-title">SECRET<span>START</span></div><span class="screen-subtitle mono">3 INPUTS. A WHOLE NEW WORLD.</span><span class="screen-prompt mono">▸ ENTER YOUR SECRET</span><span class="screen-copyright mono">© 2026 SECRET START</span></div></div></div><div class="screen-status mono"><span>SYSTEM READY<span class="press-hint">/ 3つの入力を待っています</span></span><span class="signal" aria-hidden="true"><i></i><i></i><i></i></span></div>${controls()}<div class="console-bottom mono"><span>CURIOUS MINDS ONLY.</span>${speaker()}</div></section><div class="under-console"><span class="keyboard-hint">キーボード <kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> <kbd>A</kbd><kbd>B</kbd> ＋ <kbd>Enter</kbd> でも遊べます</span><button class="text-link" data-action="help">はじめての方へ ↗</button></div></div>${aside()}</div>`;
-}
-function playingContent() {
-  const a = active!;
-  const event = a.event;
-  const skipLabel = !event ? 'タイトルに戻る' : a.source==='completion' ? 'スキップ' : !a.isNew && a.source==='command' ? '発見済み・スキップ' : 'スキップ';
-  return `<section class="intro"><div><div class="eyebrow">${a.source==='completion'?'ALL SECRETS FOUND':a.source==='library'?'FROM YOUR COLLECTION':'A SECRET IS OPENING'}</div><h1>${event ? esc(event.title) : '……何も起こらない？'}</h1></div><p>${a.source==='completion' ? '173個のひみつを見つけた、あなたへ。' : `<span class="mono">${esc(displayCommand(a.command))}</span> がひらいた世界。`}</p></section><div class="game-layout"><div class="game-main"><section class="console" aria-label="演出再生中"><div class="console-top"><span><i class="dot led"></i>${a.source==='completion'?'TRUE ENDING':event?'SECRET DISCOVERED':'NO SIGNAL'}</span><span class="console-id mono">${event?esc(event.eventId.toUpperCase()):'— — —'}</span></div><div class="screen-bezel"><div class="screen"><canvas id="game-canvas" width="320" height="200" role="img" aria-label="${event?esc(event.title):'静かなタイトル画面'}の演出"></canvas><div class="anticipation" id="anticipation">${reducedMotion()?'OPENING...':'CONNECTING . . .'}</div></div></div><p id="scene-narration" class="scene-narration" aria-live="polite" aria-atomic="true">${event ? a.isNew?'新しいひみつを記録しました。':'ひみつの世界へ、もう一度。' : 'ボタンの音だけが、そっと響いた。'}</p>${event?.category==='minigame'?`<div class="scene-controls" role="group" aria-label="ミニゲーム操作">${SYMBOLS.map(s=>`<button data-game-symbol="${s}" aria-label="${SYMBOL_LABELS[s]}">${SYMBOL_LABELS[s]}</button>`).join('')}</div><p id="scene-detail" class="scene-detail" aria-live="polite"></p>`:''}<div class="play-progress" role="progressbar" aria-label="演出の再生状況" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="play-progress"></span></div><div class="play-meta"><span class="discovery-tag">${event ? a.source==='completion'?'✦ すべてのひみつの、その先へ':a.isNew?'✦ NEW SECRET · 記録済み':a.source==='library'?'↻ 図鑑からリプレイ':'✓ 発見済み · 記録は保存済み' : '空振り · 入力履歴に記録済み'}</span><button class="skip-button" data-action="skip">${skipLabel} ↗</button></div><div class="console-bottom mono"><span>EVERY SECRET HAS A STORY.</span>${speaker()}</div></section></div>${aside()}</div>`;
-}
-function panelHead(english: string, title: string, description: string) {
-  return `<div class="panel-top"><div><div class="eyebrow">${english}</div><h1>${title}</h1><p class="panel-sub">${description}</p></div><button class="back-button" data-action="home">${icon('back')}タイトルへ</button></div>`;
-}
-function eventCards() {
-  const found = EVENTS.filter(e=>save.discoveredEventIds.includes(e.eventId) && (category==='all'||category===e.category) && (!favoritesOnly||save.favoriteEventIds.includes(e.eventId)) && (!search || `${e.title} ${displayCommand(e.command)} ${e.tags.join(' ')}`.toLowerCase().includes(search.toLowerCase())));
-  return found.length ? found.map(e=>`<article class="event-card"><span class="event-number">SECRET ${String(EVENTS.indexOf(e)+1).padStart(3,'0')}</span><h2>${esc(e.title)}</h2><div class="event-command">${esc(displayCommand(e.command))}</div><div class="event-meta">${CATEGORY_LABELS[e.category]} · ${e.durationMs/1000}秒${save.viewedEventIds.includes(e.eventId)?' · 再生済み':''}</div><div class="card-actions"><button class="small-button" data-replay="${e.eventId}" aria-label="${esc(e.title)}を再生">▶ もう一度</button><button class="favorite-button ${save.favoriteEventIds.includes(e.eventId)?'selected':''}" data-favorite="${e.eventId}" aria-pressed="${save.favoriteEventIds.includes(e.eventId)}" aria-label="${esc(e.title)}をお気に入り${save.favoriteEventIds.includes(e.eventId)?'から外す':'にする'}">${save.favoriteEventIds.includes(e.eventId)?'★':'☆'}</button></div></article>`).join('') : '<p class="empty-state">この条件のひみつは、まだ記録されていません。</p>';
-}
-function libraryContent() {
-  const p = progress(save);
-  if (!p.libraryUnlocked) return lockedContent('ひみつ図鑑', '5個の発見でひらきます。');
-  return `<section class="panel">${panelHead('THE SECRET ARCHIVE', 'ひみつ図鑑', `あなたが見つけた、${p.discovered}個の小さな世界。未発見のひみつは、まだ内緒。`)}${p.complete?'<div class="completion-banner"><span>✦ 全173演出を発見しました！ すべてのひみつの、その先へ。</span><button class="small-button" data-action="completion">真エンディングを見る</button></div>':''}<div class="filters"><input class="search-input" id="search" type="search" value="${esc(search)}" placeholder="ひみつの名前・コマンドで検索" aria-label="発見した演出を検索"><select class="filter-select" id="category" aria-label="カテゴリで絞り込む"><option value="all">すべての世界</option>${Object.entries(CATEGORY_LABELS).map(([k,v])=>`<option value="${k}" ${category===k?'selected':''}>${v}</option>`).join('')}</select><label class="filter-check"><input type="checkbox" id="favorites-only" ${favoritesOnly?'checked':''}>★ お気に入り</label>${share()}</div><div id="library-cards" class="library-grid">${eventCards()}</div></section>`;
-}
-function lockedContent(title: string, explanation: string) { return `<section class="panel">${panelHead('A LITTLE MORE EXPLORING',title,explanation)}<p class="empty-state">${icon('lock')} もう少し、ひみつを探してみよう。</p></section>`; }
-function explorerContent() {
-  if (!progress(save).explorerUnlocked) return lockedContent('探索一覧','87個の発見でひらきます。');
-  return `<section class="panel">${panelHead('216 LITTLE POSSIBILITIES','探索一覧','未入力の先にあるものは、STARTを押してからのお楽しみ。')}<div class="explorer-legend"><span>？ 未入力</span><span>✓ 発見済み</span><span>— 空振り</span><span>コマンドを選ぶと入力欄にセットします。</span></div><div class="explorer-grid">${COMMANDS.map(c=>{
-    const attempted = save.attemptedCommands.includes(c.command);
-    // Deliberately derive presentation from attempted history before consulting the mapping.
-    const discovered = attempted && !!c.eventId && save.discoveredEventIds.includes(c.eventId);
-    const status = !attempted?'未入力':discovered?'発見済み':'空振り';
-    return `<button class="explorer-cell ${!attempted?'':discovered?'found':'miss'}" data-command="${c.command}" aria-label="${displayCommand(c.command)} ${status} 入力欄にセット">${displayCommand(c.command)}<small>${!attempted?'？':discovered?'✓':'—'} ${status}</small></button>`;
-  }).join('')}</div></section>`;
-}
-function settingsContent() {
-  const rows = [
-    ['muted','音を消す','小さな電子音も、静かに。最初の操作で音声が有効になります。'],
-    ['reducedMotion','アニメーションを控えめに','揺れや点滅、大きな動きを抑えます。端末の設定も尊重します。'],
-    ['autoSkip','発見済みの演出を自動スキップ','同じコマンドなら、すぐ次の探索へ。図鑑からは通常どおり再生します。'],
-  ] as const;
-  return `<section class="panel">${panelHead('MAKE YOURSELF AT HOME','設定','あなたのペースで、ひみつ探し。')}<div class="settings-list">${rows.map(([key,title,desc])=>`<div class="setting-row"><div class="setting-copy"><strong id="${key}-label">${title}</strong><p id="${key}-description">${desc}</p></div><label class="switch"><input type="checkbox" role="switch" data-setting="${key}" aria-labelledby="${key}-label" aria-describedby="${key}-description" ${save.settings[key]?'checked':''}></label></div>`).join('')}<div class="setting-row"><div class="setting-copy"><strong>探索の記録</strong><p>このブラウザに自動保存されます。端末を変えるときは、記録を書き出して持ち運べます。</p></div><span class="mono" style="font-size:13px;white-space:nowrap">${save.discoveredEventIds.length} / 173</span></div><div class="settings-actions"><button class="small-button" data-action="export">記録を書き出す ↓</button><button class="small-button" data-action="import">記録を読み込む ↑</button><input type="file" id="import-file" accept="application/json,.json" hidden><button class="small-button danger" data-action="reset">すべての記録を消去</button></div><p class="settings-footnote">ブラウザのデータ消去やプライベートモードの終了で記録が失われる場合があります。<br>音や画像が読み込めなくても、すべてのひみつを見つけられます。通信・ログイン・課金は必要ありません。</p></div></section>`;
-}
-function helpContent() {
-  return `<section class="panel">${panelHead('A FIELD GUIDE FOR THE CURIOUS','はじめての方へ','このタイトル画面が、ゲームのすべてです。')}<div class="help-content"><div class="help-keys">↑ ↓ ← → A B</div><h2>3回押して、START。</h2><p>6つのボタンから好きなものを3回押して、STARTで確定。同じボタンを続けて押しても大丈夫。1字戻すボタンと入力リセットで、何度でも考え直せます。</p><h2>何が起こるかは、お楽しみ。</h2><p>216通りのコマンドのうち、173通りに固有のひみつが隠れています。空振りも探索の記録になります。ひみつを5個見つけると図鑑が、87個見つけると全コマンドの探索一覧がひらきます。</p><h2>あなたのペースで。</h2><p>長い演出も、いつでもスキップできます。発見は演出が始まる前に記録されるので安心。図鑑から何度でも見返せます。最後のひとつを見つけたとき、特別な扉がひらきます。</p><h2>キーボードでも。</h2><p>矢印キーと A・B を入力し、Enter で START。Backspace で1字戻す、Delete で入力リセット、Escape で演出をスキップできます。ミニゲームでも同じボタンを使います。</p><h2>共有は、気が向いたら。</h2><p>「発見をシェアする」でXの投稿画面がひらきます。投稿するかどうかは、あなたが決められます。ゲームから自動で投稿されることはありません。</p></div></section>`;
-}
-function render() {
-  cleanup();
-  audio.muted = save.settings.muted;
-  document.documentElement.classList.toggle('reduce-motion', reducedMotion());
-  const content = view==='home'?homeContent():view==='playing'&&active?playingContent():view==='library'?libraryContent():view==='explorer'?explorerContent():view==='settings'?settingsContent():helpContent();
-  app.innerHTML = `${header()}<div class="status-area"><div id="save-warning" class="save-warning" role="status" ${warning?'':'hidden'}>${esc(warning||'')}</div><div id="notice" class="toast" role="status" aria-live="polite">${esc(message)}</div><div id="input-live" class="screen-reader-only" aria-live="polite" aria-atomic="true"></div></div><main class="page" id="main-content">${content}</main>${footer()}<dialog id="confirm-dialog" aria-labelledby="dialog-title"><h2 id="dialog-title"></h2><p id="dialog-description"></p><div class="dialog-actions"><button class="small-button" data-action="reset-cancel">やめる</button><button class="small-button danger" data-action="reset-confirm" id="reset-confirm"></button></div></dialog>`;
-  if (view==='home') titleCleanup = drawTitle(document.querySelector('#game-canvas')!, reducedMotion());
-}
-function route(viewName: Exclude<View,'playing'>, push = true) {
-  if (viewName==='library'&&!progress(save).libraryUnlocked) { announce('ひみつ図鑑は5個の発見でひらきます。'); return; }
-  if (viewName==='explorer'&&!progress(save).explorerUnlocked) { announce('探索一覧は87個の発見でひらきます。'); return; }
-  active = null; inputs = []; view = viewName;
-  if (push && location.hash !== `#${viewName}`) history.pushState({view:viewName},'',`#${viewName}`);
-  render();
-  document.querySelector<HTMLElement>('main h1')?.setAttribute('tabindex','-1');
-  document.querySelector<HTMLElement>('main h1')?.focus({preventScroll:true});
-  window.scrollTo({top:0,behavior:'instant'});
-}
-function syncInputs() {
-  document.querySelector('#command-slots')!.innerHTML = slots();
-  document.querySelector('#input-count')!.textContent = String(inputs.length);
-  document.querySelector<HTMLButtonElement>('#start-button')!.disabled = inputs.length!==3;
-  document.querySelector('#input-live')!.textContent = inputs.length ? `入力 ${displayCommand(inputs.join(''))}。${inputs.length} / 3` : '入力を消しました。';
-}
-function input(symbol: InputSymbol) {
-  audio.unlock();
-  if (view==='playing') { player?.input(symbol); audio.play('input',SYMBOLS.indexOf(symbol)); return; }
-  if (view!=='home'||inputs.length===3) return;
-  inputs.push(symbol); audio.play('input',SYMBOLS.indexOf(symbol)); syncInputs();
-}
-function start() {
-  if (view!=='home'||inputs.length!==3) return;
-  const command = inputs.join('');
-  const result = recordAttempt(save,command);
-  save = result.save;
-  persist(); // Discovery commits BEFORE anticipation, animation, navigation or skip.
-  if (result.event&&!result.isNew&&save.settings.autoSkip) {
-    inputs = []; audio.play('back'); render(); announce('発見済みの演出を自動スキップしました。'); return;
-  }
-  begin({ event:result.event||null, isNew:result.isNew, source:'command',command });
-}
-function begin(playback: Playback) {
-  inputs = []; active = playback; view='playing'; message='';
-  render(); audio.play('start');
-  const heading=document.querySelector<HTMLElement>('main h1');
-  heading?.setAttribute('tabindex','-1'); heading?.focus({preventScroll:true});
-  const token = active;
-  timer = setTimeout(()=>{
-    timer = null;
-    if (active!==token) return;
-    document.querySelector('#anticipation')?.remove();
-    const canvas = document.querySelector<HTMLCanvasElement>('#game-canvas')!;
-    if (!playback.event) {
-      titleCleanup = drawTitle(canvas,true); audio.play('miss');
-      timer = setTimeout(()=>finishPlayback(false),1400);
-      return;
-    }
-    if (playback.isNew) audio.play('new');
-    player = new ScenePlayer(canvas,playback.event,{
-      reducedMotion:reducedMotion(),
-      onBeat:(beat)=>{ const el=document.querySelector('#scene-narration'); if(el) el.textContent=beat.text; },
-      onProgress:(p,detail)=>{
-        const bar=document.querySelector<HTMLElement>('#play-progress');
-        if(bar) { const percent=Math.min(100,Math.max(0,p*100)); bar.style.width=`${percent}%`; bar.parentElement!.setAttribute('aria-valuenow',String(Math.round(percent))); }
-        const el=document.querySelector('#scene-detail'); if(el&&el.textContent!==detail) el.textContent=detail;
-      },
-      onComplete:()=>{
-        if(playback.event?.category==='minigame') timer=setTimeout(()=>finishPlayback(true),1200);
-        else finishPlayback(true);
-      },
-    });
-  },reducedMotion()?150:450);
-}
-function finishPlayback(completed: boolean) {
-  if (!active) return;
-  const previous = active;
-  active = null;
-  if (completed&&previous.event&&previous.source!=='completion') {
-    save = {...save, viewedEventIds:[...new Set([...save.viewedEventIds,previous.event.eventId])]};
-    persist();
-  }
-  if (progress(save).complete&&!save.completionSeen&&previous.source!=='completion') { complete(); return; }
-  view=previous.source==='library'?'library':'home';
-  inputs=[];
-  message=previous.source==='completion'?'すべてのひみつを見つけてくれて、ありがとう。図鑑と探索一覧はいつでも楽しめます。':previous.isNew?`✦「${previous.event!.title}」を図鑑に記録。${save.discoveredEventIds.length} / 173 発見。${save.discoveredEventIds.length===5?'ひみつ図鑑がひらきました！':save.discoveredEventIds.length===87?'探索一覧がひらきました！':''}`:previous.event?'記録済みのひみつでした。次の世界を探してみよう。':'空振りを記録しました。次の3つを、試してみよう。';
-  render();
-  const returnFocus=document.querySelector<HTMLElement>(view==='library'?'main h1':'[data-symbol="U"]');
-  if(view==='library')returnFocus?.setAttribute('tabindex','-1');
-  returnFocus?.focus({preventScroll:true});
-}
-function complete() {
-  if (!progress(save).complete) return;
-  save={...save,completionSeen:true}; persist();
-  begin({event:TRUE_ENDING,isNew:false,source:'completion',command:''});
-}
-function resetDialog(step: number) {
-  resetStep=step;
-  const dialog=document.querySelector<HTMLDialogElement>('#confirm-dialog')!;
-  if(!dialog.open) lastFocus=document.activeElement as HTMLElement;
-  document.querySelector('#dialog-title')!.textContent=step===1?'探索の記録を消去しますか？':'本当に、すべて消去しますか？';
-  document.querySelector('#dialog-description')!.textContent=step===1?'ひみつ図鑑・入力履歴・お気に入り・設定が消えます。先に記録を書き出して保管できます。':'この操作は取り消せません。173個のひみつを、最初から探し直すことになります。';
-  document.querySelector('#reset-confirm')!.textContent=step===1?'次へ進む':'すべて消去する';
-  if(!dialog.open) dialog.showModal();
-  document.querySelector<HTMLButtonElement>('[data-action="reset-cancel"]')!.focus();
-}
-function closeReset() { document.querySelector<HTMLDialogElement>('#confirm-dialog')!.close(); resetStep=0; lastFocus?.focus(); }
-function exportSave() {
-  const blob=new Blob([JSON.stringify(save,null,2)],{type:'application/json'});
-  const url=URL.createObjectURL(blob); const anchor=document.createElement('a'); anchor.href=url; anchor.download=`secret-start-${new Date().toISOString().slice(0,10)}.json`; anchor.click();
-  setTimeout(()=>URL.revokeObjectURL(url),1000); announce('探索の記録を書き出しました。大切に保管してください。');
-}
-
+function showPlaybackEnd(){if(!active)return;playbackComplete=true;audio.stop();if(active.event&&active.source!=='admin'&&active.source!=='completion'&&save.discoveredEventIds.includes(active.event.eventId)){save={...save,viewedEventIds:[...new Set([...save.viewedEventIds,active.event.eventId])]};persist();}const status=document.querySelector('#reading-status');if(status)status.textContent='自動では閉じません。読み終えたら戻れます。';const button=document.querySelector<HTMLButtonElement>('#start-button');if(button){button.classList.add('return-button');button.dataset.action='return';button.innerHTML=`<span>${active.returnModal?'読み終えた・戻る':'読み終えた・タイトルへ'}</span>`;button.setAttribute('aria-label','読み終えたので戻る');}const skip=document.querySelector<HTMLButtonElement>('[data-action="skip"]');if(skip){skip.textContent='戻る';}}
+function finishPlayback(){if(!active)return;const previous=active;active=null;if(previous.source==='command'&&progress(save).complete&&!save.completionSeen){complete();return;}inputs=[];playbackComplete=false;message=previous.source==='admin'?'プレビューを終了しました。収集記録は変わりません。':previous.isNew?`「${previous.event!.title}」を記録しました。`:previous.event?'次の3つを、試してみよう。':'空振りを記録しました。';renderGame();if(previous.returnModal)openModal(previous.returnModal,false);else document.querySelector<HTMLButtonElement>('[data-symbol="U"]')?.focus({preventScroll:true});}
+function complete(preview=false){if(!preview&&!progress(save).complete)return;if(!preview){save={...save,completionSeen:true};persist();}begin({event:TRUE_ENDING,isNew:false,source:preview?'admin':'completion',command:'',returnModal:preview?'admin':undefined});}
+function resetDialog(step:number){resetStep=step;const dialog=document.querySelector<HTMLDialogElement>('#confirm-dialog')!;if(!dialog.open)resetFocus=document.activeElement as HTMLElement;document.querySelector('#dialog-title')!.textContent=step===1?'探索の記録を消去しますか？':'本当に、すべて消去しますか？';document.querySelector('#dialog-description')!.textContent=step===1?'図鑑・入力履歴・お気に入り・設定が消えます。先に書き出して保管できます。':'この操作は取り消せません。最初から探し直すことになります。';document.querySelector('#reset-confirm')!.textContent=step===1?'次へ進む':'すべて消去する';if(!dialog.open)dialog.showModal();document.querySelector<HTMLButtonElement>('[data-action="reset-cancel"]')!.focus();}
+function closeReset(){document.querySelector<HTMLDialogElement>('#confirm-dialog')!.close();resetStep=0;resetFocus?.focus();}
+function modalNotice(text:string){const el=document.querySelector('#modal-notice');if(el)el.textContent=text;else announce(text);}
+function exportSave(){const url=URL.createObjectURL(new Blob([JSON.stringify(save,null,2)],{type:'application/json'})),link=document.createElement('a');link.href=url;link.download=`secret-start-${new Date().toISOString().slice(0,10)}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);modalNotice('記録を書き出しました。');}
 app.addEventListener('click',e=>{
-  const el=(e.target as Element).closest<HTMLElement>('button,a'); if(!el) return;
-  audio.unlock();
-  if(el.dataset.symbol) { input(el.dataset.symbol as InputSymbol); return; }
-  if(el.dataset.gameSymbol) { input(el.dataset.gameSymbol as InputSymbol); return; }
-  if(el.dataset.replay) { const event=EVENT_BY_ID.get(el.dataset.replay); if(event&&save.discoveredEventIds.includes(event.eventId)) begin({event,isNew:false,source:'library',command:event.command}); return; }
-  if(el.dataset.favorite) {
-    save=toggleFavorite(save,el.dataset.favorite); persist();
-    document.querySelector('#library-cards')!.innerHTML=eventCards();
-    document.querySelector<HTMLButtonElement>(`[data-favorite="${el.dataset.favorite}"]`)?.focus(); return;
-  }
-  if(el.dataset.command) { const command=el.dataset.command; route('home'); inputs=[...command] as InputSymbol[]; syncInputs(); announce(`${displayCommand(command)} をセットしました。STARTで確定します。`); document.querySelector<HTMLButtonElement>('#start-button')?.focus(); return; }
-  const action=el.dataset.action;
-  if(action==='home'||action==='library'||action==='explorer'||action==='settings'||action==='help') { route(action); return; }
-  if(action==='sound') { save.settings.muted=!save.settings.muted; persist(); if(save.settings.muted)audio.stop(); else {audio.unlock();audio.play('input');} el.innerHTML=icon(save.settings.muted?'muted':'sound'); el.setAttribute('aria-label',save.settings.muted?'音をオンにする':'音をオフにする'); el.setAttribute('aria-pressed',String(!save.settings.muted)); const check=document.querySelector<HTMLInputElement>('[data-setting="muted"]'); if(check)check.checked=save.settings.muted; return; }
-  if(action==='start') { start(); return; }
-  if(action==='skip') { finishPlayback(false); return; }
-  if((action==='delete'||action==='clear')&&view==='home') { if(action==='clear')inputs=[];else inputs.pop(); audio.play('back'); syncInputs(); return; }
-  if(action==='completion') { complete(); return; }
-  if(action==='export') { exportSave(); return; }
-  if(action==='import') { document.querySelector<HTMLInputElement>('#import-file')!.click(); return; }
-  if(action==='reset') { resetDialog(1); return; }
-  if(action==='reset-cancel') { closeReset(); return; }
-  if(action==='reset-confirm') {
-    if(resetStep===1) {resetDialog(2);return;}
-    if(resetStep===2) {
-      closeReset(); save=createEmptySave();
-      // Removal is an explicit cross-tab reset signal; following writes cannot union old discoveries back in.
-      try{storage?.removeItem(SAVE_KEY);storage?.removeItem(RECOVERY_KEY);}catch{ /* persist reports unavailability below. */ }
-      persist();inputs=[];message='探索の記録を消去しました。新しいひみつ探しを始めよう。';render();
-    }return;
+  const el=(e.target as Element).closest<HTMLElement>('button,a');if(!el)return;audio.unlock();
+  if(el.dataset.modal){openModal(el.dataset.modal as Modal);return;}
+  if(el.dataset.symbol){input(el.dataset.symbol as InputSymbol);return;}
+  if(el.dataset.replay){const event=EVENT_BY_ID.get(el.dataset.replay),found=event&&save.discoveredEventIds.includes(event.eventId);if(event&&(found||adminEnabled))begin({event,isNew:false,source:adminEnabled?'admin':'library',command:event.command,returnModal:activeModal||'library'});return;}
+  if(el.dataset.favorite){save=toggleFavorite(save,el.dataset.favorite);persist();const cards=document.querySelector('#library-cards');if(cards)cards.innerHTML=eventCards(activeModal==='admin');document.querySelector<HTMLButtonElement>(`[data-favorite="${el.dataset.favorite}"]`)?.focus();return;}
+  if(el.dataset.command){const command=el.dataset.command;closeModal(false);history.replaceState(null,'','#home');active=null;inputs=[...command] as InputSymbol[];renderGame();syncInputs();announce(`${displayCommand(command)} をセットしました。`);document.querySelector<HTMLButtonElement>('#start-button')?.focus();return;}
+  switch(el.dataset.action){
+    case 'close-modal':closeModal();break;
+    case 'sound':save.settings.muted=!save.settings.muted;persist();if(save.settings.muted)audio.stop();else audio.unlock();el.innerHTML=icon(save.settings.muted?'muted':'sound');el.setAttribute('aria-label',save.settings.muted?'音をオンにする':'音をオフにする');el.setAttribute('aria-pressed',String(!save.settings.muted));break;
+    case 'start':start();break;
+    case 'advance':if(active?.event?.category==='minigame')player?.input('START');else player?.nextBeat();break;
+    case 'return':case 'skip':finishPlayback();break;
+    case 'transcript':openModal('transcript');break;
+    case 'delete':case 'clear':if(!active){if(el.dataset.action==='clear')inputs=[];else inputs.pop();audio.play('back');syncInputs();}break;
+    case 'completion':complete();break;
+    case 'preview-ending':if(adminEnabled)complete(true);break;
+    case 'export':exportSave();break;
+    case 'import':document.querySelector<HTMLInputElement>('#import-file')?.click();break;
+    case 'reset':resetDialog(1);break;
+    case 'reset-cancel':closeReset();break;
+    case 'reset-confirm':if(resetStep===1){resetDialog(2);break;}if(resetStep===2){closeReset();save=createEmptySave();try{storage?.removeItem(SAVE_KEY);storage?.removeItem(RECOVERY_KEY);}catch{}persist();fillModal();modalNotice('探索の記録を消去しました。');}break;
   }
 });
-app.addEventListener('input',e=>{
-  const el=e.target as HTMLInputElement;
-  if(el.id==='search') {search=el.value;document.querySelector('#library-cards')!.innerHTML=eventCards();}
-});
+app.addEventListener('input',e=>{const el=e.target as HTMLInputElement;if(el.id==='search'){search=el.value;document.querySelector('#library-cards')!.innerHTML=eventCards(activeModal==='admin');}});
 app.addEventListener('change',async e=>{
   const el=e.target as HTMLInputElement;
-  if(el.dataset.setting) {
-    save.settings[el.dataset.setting as keyof SaveData['settings']]=el.checked;persist();
-    if(save.settings.muted)audio.stop();
-    const button=document.querySelector<HTMLElement>('[data-action="sound"]');
-    if(button){button.innerHTML=icon(save.settings.muted?'muted':'sound');button.setAttribute('aria-label',save.settings.muted?'音をオンにする':'音をオフにする');button.setAttribute('aria-pressed',String(!save.settings.muted));}
-    return;
-  }
-  if(el.id==='category') {category=el.value;document.querySelector('#library-cards')!.innerHTML=eventCards();}
-  if(el.id==='favorites-only') {favoritesOnly=el.checked;document.querySelector('#library-cards')!.innerHTML=eventCards();}
-  if(el.id==='import-file'&&el.files?.[0]) {
-    try {
-      if(el.files[0].size>1_000_000)throw new Error('size');
-      const raw=JSON.parse(await el.files[0].text());
-      if(!raw||typeof raw!=='object'||Array.isArray(raw)||(raw.schemaVersion!==1&&raw.schemaVersion!==2)||!Array.isArray(raw.discoveredEventIds??raw.discovered))throw new Error('format');
-      save=mergeSaves(save,normalizeSave(raw));persist();render();announce('記録を読み込み、この端末の探索記録とまとめました。');
-    }catch{announce('記録を読み込めませんでした。SECRET START から書き出したJSONファイルを選んでください。');}
-  }
+  if(el.dataset.setting){save.settings[el.dataset.setting as keyof SaveData['settings']]=el.checked;persist();if(save.settings.muted)audio.stop();player?.setReducedMotion(reducedMotion());const sound=document.querySelector('[data-action="sound"]');if(sound){sound.innerHTML=icon(save.settings.muted?'muted':'sound');sound.setAttribute('aria-label',save.settings.muted?'音をオンにする':'音をオフにする');sound.setAttribute('aria-pressed',String(!save.settings.muted));}return;}
+  if(el.id==='admin-toggle'){adminEnabled=el.checked;try{storage?.setItem(ADMIN_KEY,adminEnabled?'on':'off');}catch{}fillModal();document.querySelector<HTMLInputElement>('#admin-toggle')?.focus();return;}
+  if(el.id==='category'){category=el.value;document.querySelector('#library-cards')!.innerHTML=eventCards(activeModal==='admin');}
+  if(el.id==='favorites-only'){favoritesOnly=el.checked;document.querySelector('#library-cards')!.innerHTML=eventCards(activeModal==='admin');}
+  if(el.id==='import-file'&&el.files?.[0])try{if(el.files[0].size>1_000_000)throw new Error('size');const raw=JSON.parse(await el.files[0].text());if(!raw||typeof raw!=='object'||Array.isArray(raw)||(raw.schemaVersion!==1&&raw.schemaVersion!==2)||!Array.isArray(raw.discoveredEventIds??raw.discovered))throw new Error('format');save=mergeSaves(save,normalizeSave(raw));persist();fillModal();modalNotice('記録を読み込み、この端末の記録とまとめました。');}catch{modalNotice('SECRET STARTから書き出したJSONファイルを選んでください。');}
 });
-document.addEventListener('keydown',e=>{
-  const target=e.target as HTMLElement;
-  if(document.querySelector<HTMLDialogElement>('#confirm-dialog')?.open||target.matches('input,select,textarea')||e.ctrlKey||e.metaKey||e.altKey)return;
-  const keys: Record<string,InputSymbol>={ArrowUp:'U',ArrowDown:'D',ArrowLeft:'L',ArrowRight:'R',a:'A',A:'A',b:'B',B:'B'};
-  const symbol=keys[e.key];
-  if(symbol&&(view==='home'||view==='playing')) {e.preventDefault();if(!e.repeat)input(symbol);return;}
-  if(e.key==='Enter'&&(target.matches('[data-symbol],[data-game-symbol]')||!target.closest('button,a'))&&(view==='home'||view==='playing')) {e.preventDefault();audio.unlock();if(view==='home')start();else player?.input('START');}
-  if(e.key==='Backspace'&&view==='home') {e.preventDefault();inputs.pop();syncInputs();audio.play('back');}
-  if(e.key==='Delete'&&view==='home') {e.preventDefault();inputs=[];syncInputs();}
-  if(e.key==='Escape'&&view==='playing') {e.preventDefault();finishPlayback(false);}
-});
-window.addEventListener('popstate',()=>{
-  const hash=location.hash.slice(1);
-  const next: Exclude<View,'playing'>=['library','explorer','settings','help'].includes(hash)?hash as Exclude<View,'playing'>:'home';
-  if((next==='library'&&!progress(save).libraryUnlocked)||(next==='explorer'&&!progress(save).explorerUnlocked)){route('home',false);return;}
-  route(next,false);
-});
-window.addEventListener('storage',e=>{
-  if(e.key!==SAVE_KEY&&e.key!==null)return;
-  if(e.newValue===null){save=createEmptySave();active=null;inputs=[];view='home';render();announce('別のタブで探索の記録が消去されました。');return;}
-  try { const incoming=normalizeSave(JSON.parse(e.newValue)); save=mergeSaves(save,incoming); if(view!=='playing')render(); }catch{ /* Keep intact in-memory progress. */ }
-});
-window.addEventListener('pagehide',()=>{cleanup();audio.stop();});
-window.addEventListener('pageshow',e=>{if(e.persisted){active=null;view='home';inputs=[];render();}});
-document.addEventListener('visibilitychange',()=>{player?.pause(document.hidden);if(document.hidden)audio.stop();});
-motionQuery.addEventListener('change',()=>{player?.setReducedMotion(reducedMotion());if(view==='home')render();document.documentElement.classList.toggle('reduce-motion',reducedMotion());});
-audio.muted=save.settings.muted;
-if(loaded.migrated)persist();
-const initial=location.hash.slice(1);
-if(['library','explorer','settings','help'].includes(initial))view=initial as View;
-if((view==='library'&&!progress(save).libraryUnlocked)||(view==='explorer'&&!progress(save).explorerUnlocked))view='home';
-render();
+document.addEventListener('keydown',e=>{const target=e.target as HTMLElement;if(document.querySelector('dialog[open]')||target.matches('input,select,textarea')||e.ctrlKey||e.metaKey||e.altKey)return;const keys:Record<string,InputSymbol>={ArrowUp:'U',ArrowDown:'D',ArrowLeft:'L',ArrowRight:'R',a:'A',A:'A',b:'B',B:'B'};if(keys[e.key]){e.preventDefault();if(!e.repeat)input(keys[e.key]);return;}if(e.key==='Enter'&&(target.matches('[data-symbol]')||!target.closest('button,a'))){e.preventDefault();audio.unlock();if(!active)start();else if(playbackComplete)finishPlayback();else if(active.event?.category==='minigame')player?.input('START');else player?.nextBeat();}if(e.key==='Backspace'&&!active){e.preventDefault();inputs.pop();syncInputs();}if(e.key==='Delete'&&!active){e.preventDefault();inputs=[];syncInputs();}if(e.key==='Escape'&&active){e.preventDefault();finishPlayback();}});
+window.addEventListener('popstate',()=>{const name=location.hash.slice(1) as Modal;if(Object.hasOwn(titles,name))openModal(name,false);else closeModal(false);});
+window.addEventListener('storage',e=>{if(e.key!==SAVE_KEY&&e.key!==null)return;if(e.newValue===null){save=createEmptySave();active=null;inputs=[];activeModal=null;renderGame();announce('別のタブで記録が消去されました。');return;}try{save=mergeSaves(save,normalizeSave(JSON.parse(e.newValue)));if(activeModal)fillModal();}catch{}});
+window.addEventListener('pagehide',cleanup);
+window.addEventListener('pageshow',e=>{if(e.persisted){active=null;activeModal=null;inputs=[];renderGame();}});
+document.addEventListener('visibilitychange',()=>{player?.pause(document.hidden||!!activeModal);if(document.hidden)audio.stop();});
+motionQuery.addEventListener('change',()=>{player?.setReducedMotion(reducedMotion());document.documentElement.classList.toggle('reduce-motion',reducedMotion());if(!active){titleCleanup?.();titleCleanup=drawTitle(document.querySelector('#game-canvas')!,reducedMotion());}});
+if(loaded.migrated)persist();renderGame();const initial=location.hash.slice(1) as Modal;if(Object.hasOwn(titles,initial))openModal(initial,false);
 if('serviceWorker'in navigator&&import.meta.env.PROD)window.addEventListener('load',()=>{void navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(()=>{});});

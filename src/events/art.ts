@@ -60,7 +60,30 @@ export function background(ctx:CanvasRenderingContext2D,p:Palette,time:number,re
   ctx.fillStyle=p.mid;ctx.fillRect(8,185,1,7);ctx.fillRect(8,191,7,1);ctx.fillRect(311,185,1,7);ctx.fillRect(305,191,7,1);
 }
 
-type ActorOptions={scale?:number;flip?:boolean;rotation?:number;opacity?:number;pose?:number;tint?:string};
+export const ACTOR_NAMES: Record<Actor, string> = {
+  hero: '主人公', cat: '猫', ghost: 'おばけ', robot: 'ロボット', slime: 'スライム',
+  bird: '鳥', star: '星', moon: '月', fish: '魚', box: '箱', title: '看板',
+  crown: '王冠', plant: '植木', cake: 'ケーキ',
+};
+
+/** Small, readable labels connect the concrete sprites to the Japanese narration. */
+export function actorLabel(ctx:CanvasRenderingContext2D,kind:Actor,x:number,y:number,p:Palette) {
+  const label=ACTOR_NAMES[kind],width=label.length*10+10;
+  const left=clamp(Math.round(x-width/2),3,317-width);
+  ctx.save();ctx.fillStyle=p.bg;ctx.globalAlpha=.9;ctx.fillRect(left,y-10,width,14);
+  ctx.globalAlpha=1;ctx.fillStyle=p.pale;ctx.font='10px sans-serif';ctx.textAlign='center';ctx.textBaseline='top';
+  ctx.fillText(label,left+width/2,y-8);ctx.restore();
+}
+
+/** The console prints the actual caption instead of unrelated English filler. */
+export function captionText(ctx:CanvasRenderingContext2D,text:string,x:number,y:number,p:Palette,columns=15,lines=3) {
+  ctx.save();ctx.font='10px sans-serif';ctx.textAlign='left';ctx.textBaseline='top';ctx.fillStyle=p.pale;
+  const characters=[...text];
+  for(let row=0;row<lines;row++)ctx.fillText(characters.slice(row*columns,(row+1)*columns).join(''),x,y+row*14);
+  ctx.restore();
+}
+
+type ActorOptions={scale?:number;flip?:boolean;rotation?:number;opacity?:number;pose?:number;tint?:string;signText?:string};
 export function actor(ctx:CanvasRenderingContext2D,kind:Actor,x:number,y:number,p:Palette,options:ActorOptions={}) {
   ctx.save();ctx.translate(Math.round(x),Math.round(y));ctx.scale((options.flip?-1:1)*(options.scale??1),options.scale??1);ctx.rotate(options.rotation??0);ctx.globalAlpha=options.opacity??1;
   const dark=p.dark,mid=p.mid,light=options.tint??p.light,pale=p.pale,ink=p.bg;
@@ -82,7 +105,7 @@ export function actor(ctx:CanvasRenderingContext2D,kind:Actor,x:number,y:number,
     case 'moon':box(-5,-23,12,2);box(-9,-21,17,17);box(-5,-4,12,2);box(-11,-16,21,8);box(0,-23,11,18,ink);box(-2,-13,3,3,mid);break;
     case 'fish':box(-8,-14,15,9);box(-11,-11,21,4);box(-13,-16,4,13,mid);box(-7,-17,7,3,mid);box(-7,-5,7,3,mid);box(5,-12,2,2,ink);box(-4,-12,3,3,pale);break;
     case 'box':box(-10,-21,20,21,dark);box(-9,-20,18,18,mid);box(-9,-20,18,3,light);box(-1,-20,3,18,light);box(-8,-15,5,1,dark);box(5,-9,2,5,dark);break;
-    case 'title':box(-25,-19,50,17,dark);box(-24,-18,48,15,light);box(-21,-15,42,9,ink);pixelText(ctx,'SECRET',0,-14,pale,1,'center');break;
+    case 'title':box(-25,-19,50,17,dark);box(-24,-18,48,15,light);box(-21,-15,42,9,ink);ctx.fillStyle=pale;ctx.font='9px sans-serif';ctx.textAlign='center';ctx.textBaseline='top';ctx.fillText(options.signText??'ひみつ',0,-15);break;
     case 'crown':box(-11,-18,4,14);box(-3,-16,6,12);box(7,-18,4,14);box(-10,-10,20,8);box(-9,-4,18,3,mid);box(-1,-8,3,3,pale);break;
     case 'plant':box(-6,-8,12,8,mid);box(-8,-10,16,3,light);box(-1,-23,2,14,mid);box(-9,-22,8,6);box(1,-27,8,7);box(-7,-26,6,5,mid);box(2,-21,7,4,mid);break;
     case 'cake':box(-11,-15,22,14,mid);box(-12,-17,24,6,pale);box(-10,-12,20,4,light);box(-9,-3,18,2,dark);box(-1,-24,2,7,light);box(-2,-27,4,3,pale);box(-9,-13,2,3,pale);box(4,-13,2,4,pale);break;

@@ -1,0 +1,90 @@
+body{background:#171d19;color:#e4e6d8;min-height:100svh}
+.console-page{width:min(100%,540px);margin:0 auto;padding:max(8px,env(safe-area-inset-top)) max(7px,env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom)) max(7px,env(safe-area-inset-left))}
+.console-page>.console{width:100%;padding:15px 18px 12px;box-shadow:0 3px 0 #0e130f,0 10px 35px #0003}
+.console-page .console-top{margin-bottom:12px;min-height:30px}
+.console-sound{display:grid;place-items:center;min-width:44px;min-height:44px;background:none;border:0;color:#aeb8a4;padding:4px}
+.console-page .screen-title{font-size:clamp(34px,9.5vw,53px);margin:0;letter-spacing:2px}
+.console-page .controller{padding:19px 15px 18px}
+.console-page .screen-status{min-height:35px;line-height:1.8;margin:7px 0 10px;gap:12px}
+.screen-status #console-notice{font-size:9px;letter-spacing:.5px;max-width:90%;overflow-wrap:anywhere}
+.console-menu{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px;border-top:1px solid #46513e;margin-top:20px;padding-top:10px}
+.console-menu button{min-height:46px;min-width:44px;color:#b8c3ac;border:0;border-radius:4px;background:none;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:5px;font-size:10px}
+.console-menu button:hover{background:#3a4633;color:#ffe0a1}
+.console-menu svg{width:17px;height:17px}
+.console-page .console-bottom{margin-top:6px;padding-top:9px;font-size:7px}
+.console-page .command-row{padding-top:13px}
+.console-page .start-button{min-width:165px;letter-spacing:2px;font-size:15px}
+.console-page .start-button.return-button{letter-spacing:0;font-family:inherit;font-size:12px;padding:8px 12px;max-width:70%}
+.console-page .slot-back:disabled{opacity:.3}
+.console-page .scene-dialogue{margin-top:14px;padding-bottom:8px}
+.scene-heading{display:flex;justify-content:space-between;align-items:start;gap:14px}
+.scene-heading h1{font-size:16px;line-height:1.7;color:#f2ddb0;margin:0;flex:1}
+.scene-heading>span{font-size:10px;color:#96a98a;white-space:nowrap;padding-top:5px}
+.console-page .scene-narration{font-size:15px;line-height:1.95;min-height:85px;justify-content:start;text-align:left;margin:10px 0;white-space:pre-wrap;font-weight:500}
+.scene-cast{font-size:10px;letter-spacing:.05em;color:#9da98e;margin:3px 0 0}
+.console-page .scene-detail{min-height:0;font-size:11px;line-height:1.8;margin:8px 0}
+.scene-detail:empty{display:none}
+.story-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.story-tools button{min-height:44px;border:1px solid #647456;border-radius:4px;color:#d5ddc8;background:#35412e;font-size:10px;padding:0 9px}
+.story-tools>span{font-size:10px;line-height:1.8;color:#9fac8d;flex:1;min-width:140px}
+.console-page .play-progress{margin:12px 0 0}
+.info-dialog{max-width:900px;width:calc(100% - 24px);max-height:90svh;padding:0;border:1px solid #a9b69b;border-radius:10px;background:#f4f6ec;color:#293126;overflow:auto;overscroll-behavior:contain}
+.modal-header{position:sticky;top:0;z-index:3;display:flex;align-items:center;justify-content:space-between;gap:15px;padding:12px 20px;border-bottom:1px solid #c9d2be;background:#edf1e5}
+.modal-header h1{font-size:17px;margin:0;line-height:1.7}
+.modal-close{display:grid;place-items:center;min-width:44px;min-height:44px;background:none;border:1px solid #c4cfb6;border-radius:5px;color:#4b5e3e}
+.modal-content{padding:20px 24px 28px}
+.modal-content .panel-title{font-size:19px;margin:0 0 10px;line-height:1.7}
+.modal-content .panel-sub{font-size:12px;line-height:1.9;margin:0 0 17px}
+.modal-content .library-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.modal-content .event-card h3{font-size:14px;line-height:1.7;margin:12px 0;min-height:44px;display:flex;align-items:center}
+.modal-content .filters{margin-top:18px}
+.modal-content .progress-count{margin-top:0}
+.modal-content .discovery-grid{grid-template-columns:repeat(29,1fr)}
+.modal-content .settings-actions{padding-bottom:18px}
+.modal-content .explorer-grid{margin-top:18px}
+.explorer-title{display:block;letter-spacing:0;font-size:9px;font-family:inherit;font-weight:400;line-height:1.6;margin-top:8px;overflow-wrap:anywhere}
+.modal-content .help-content p{font-size:13px;line-height:2}
+.modal-notice{margin:0 24px;font-size:12px;line-height:1.9;color:#637c51}
+.modal-notice:not(:empty){padding:12px 0;border-bottom:1px solid #d6ddcc}
+.transcript{list-style:none;padding:0;margin:20px 0 0;display:flex;flex-direction:column;gap:13px}
+.transcript li{display:flex;gap:12px;align-items:start;padding:14px;border:1px solid #d3dac8;border-radius:5px}
+.transcript li[aria-current]{background:#e7eddc;border-color:#90a17d}
+.transcript li>span{font:12px 'Courier New',monospace;color:#6e855c;padding-top:5px}
+.transcript p{font-size:14px;line-height:1.9;margin:0}
+.info-dialog .share-link{background:#eef3e4}
+.info-dialog .switch input{flex-shrink:0}
+.info-dialog .settings-actions button{flex:1 1 150px}
+#confirm-dialog{z-index:8}
+@media(max-width:600px){
+  .console-page{padding-top:max(3px,env(safe-area-inset-top));padding-left:3px;padding-right:3px;padding-bottom:max(3px,env(safe-area-inset-bottom))}
+  .console-page>.console{border-radius:16px;padding:12px 14px 10px}
+  .console-page .controller{padding-left:7px;padding-right:7px}
+  .console-page .console-top{font-size:8px;letter-spacing:1.3px;margin-bottom:7px}
+  .console-page .console-menu{margin-top:17px}
+  .console-page .scene-narration{font-size:14px;min-height:80px}
+  .modal-header{padding:9px 12px}
+  .modal-content{padding:17px 14px 22px}
+  .modal-content .library-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+  .modal-content .event-card{padding:12px}
+  .modal-content .event-card h3{font-size:12px}
+  .info-dialog{width:calc(100% - 12px);max-height:94svh}
+  .modal-content .panel-title{font-size:17px}
+  .modal-content .panel-sub{font-size:11px}
+  .modal-content .explorer-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .modal-content .explorer-cell{font-size:14px}
+  .console-page .screen-title{font-size:clamp(33px,10vw,50px)}
+  .console-page .start-button{min-width:150px}
+  .console-page .scene-heading h1{font-size:14px}
+  .console-page .scene-cast{font-size:9px}
+  .modal-notice{margin:0 14px}
+  .console-page .scene-dialogue .play-progress{margin-bottom:5px}
+}
+@media(max-width:360px){
+  .console-page>.console{padding-left:11px;padding-right:11px}
+  .console-page .controller{padding-left:0;padding-right:0}
+  .console-menu button{font-size:9px}
+  .console-page .scene-narration{font-size:13px}
+  .console-page .return-button{min-width:0!important;font-size:11px!important}
+  .modal-content .library-grid{grid-template-columns:1fr}
+  .console-page .screen-kicker{font-size:6px;letter-spacing:1.6px}
+}
