@@ -1,0 +1,65 @@
+name: Test and deploy GitHub Pages
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: read
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Test all commands and saved progress
+        run: npm test
+      - name: Read GitHub Pages URL
+        if: github.event_name != 'pull_request' && github.ref_name == github.event.repository.default_branch
+        id: pages
+        uses: actions/configure-pages@v5
+      - name: Build static site
+        run: npm run build
+        env:
+          VITE_BASE_PATH: ${{ steps.pages.outputs.base_path || '/' }}
+          VITE_PUBLIC_URL: ${{ steps.pages.outputs.base_url || '' }}
+      - name: Verify production files
+        run: node scripts/verify-build.mjs
+      - name: Upload GitHub Pages artifact
+        if: github.event_name != 'pull_request' && github.ref_name == github.event.repository.default_branch
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref_name == github.event.repository.default_branch
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
