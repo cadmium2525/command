@@ -38,7 +38,7 @@ try{
   const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,reducedMotion:'reduce'});
   const page=await context.newPage();
   const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
-  const failedRequests:string[]=[];page.on('response',res=>{if(res.status()>=400&&res.url().startsWith(url))failedRequests.push(`${res.status()} ${res.url()}`);});
+  const failedRequests:string[]=[];page.on('response',res=>{if(res.status()>=400&&new URL(res.url()).origin===new URL(url).origin)failedRequests.push(`${res.status()} ${res.url()}`);});
   const state=()=>page.evaluate(key=>JSON.parse(localStorage.getItem(key)||'{}'),SAVE_KEY);
   const skip=()=>page.locator('[data-action="skip"]').click();
   const setCommand=async(command:string)=>{

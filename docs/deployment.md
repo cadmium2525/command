@@ -78,7 +78,7 @@ Remove-Item Env:VITE_PUBLIC_URL -ErrorAction SilentlyContinue
 
 2026 年 10 月 23 日、ユーザーが用意した公開リポジトリ `cadmium2525/command` へ完成版を push し、GitHub Pages の公開元を GitHub Actions に設定しました。ホスト環境の GitHub CLI 認証を利用して、初回の build と deploy が成功したことを確認しています。以前の制限環境での認証確認では接続を判定できませんでしたが、ホスト環境での認証は有効でした。
 
-ローカルと公開先の検証結果は [test-plan.md](test-plan.md) に記録します。
+ローカルと公開先の検証結果は [test-plan.md](test-plan.md) に記録しています。公開URLで全216入力を含むブラウザーテスト15項目が成功し、生成画像2枚・共有URL・オフラインでの再起動も確認しました。
 
 ## 公式資料
 
