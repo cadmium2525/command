@@ -90,8 +90,14 @@ export class ScenePlayer {
     // Leave the engine's score, lives, ammunition and goals readable at the sides.
     ctx.fillStyle=p.bg;ctx.fillRect(141,0,38,19);
     const seconds=Math.floor(this.elapsed/1000),clock=this.event.durationMs>0?`${Math.ceil(Math.max(0,this.event.durationMs-this.elapsed)/1000)}S`:`${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}`;
-    pixelText(ctx,clock,160,7,p.light,1,'center');
-    if(this.ready){ctx.fillStyle='#080e12b8';ctx.fillRect(69,73,182,51);pixelText(ctx,'READY?',160,85,p.pale,2,'center');pixelText(ctx,'PRESS A / START',160,108,p.light,1,'center');}
+    pixelText(ctx,this.event.durationMs>0?'LEFT':'TIME',160,1,p.ink,1,'center');
+    pixelText(ctx,clock,160,10,p.light,1,'center');
+    if(this.ready){
+      ctx.fillStyle='#080e12e8';ctx.fillRect(69,73,182,53);
+      ctx.textAlign='center';ctx.textBaseline='top';ctx.fillStyle=p.pale;
+      ctx.font='bold 14px system-ui, sans-serif';ctx.fillText('プレイ準備',160,83);
+      ctx.font='10px system-ui, sans-serif';ctx.fillText('Aボタン / START で開始',160,108);
+    }
     ctx.restore();
   }
 }

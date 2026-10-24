@@ -1,12 +1,16 @@
-# SECRET START 継続プレイ版 検証記録
+# SECRET START 公開版 検証記録
 
-対象は、通常版の小ノルマと一律時間上限を撤廃し、完集ゲームを専用アーケード・リミックスへ変更した版です。過去の短編版の成功件数は流用しません。
+対象は、管理者メニューと全開放プレビューを削除した通常公開版です。図鑑5種類・探索一覧87種類・コンプリート173種類の発見条件を表示と実行側の両方で適用します。保存形式とコマンド・イベントIDは変更していません。通常ゲームの継続プレイと専用アーケード・リミックスも保持しています。
 
 ## 2026年10月24日の結果
 
-単体テスト **90 / 90 合格**。TypeScriptの型検査、本番ビルド、配布物の参照先とService Workerの検査も成功しました。配布物は7ファイル、384.1 KiB、事前キャッシュ6件です。
+単体テスト **90 / 90 合格**。TypeScriptの型検査、本番ビルド、配布物の参照先とService Workerの検査も成功しました。配布物は7ファイル、383.5 KiB、事前キャッシュ6件です。
 
-Edgeで最終配布物を `/command/` に置いたブラウザー検証は **17 / 17 合格**。全173プレビュー、全216入力、43空振り、18ジャンル、管理者モード、保存と移行、モーダル、画面サイズ、オフラインを確認しました。JavaScript実行エラーと同一オリジンのHTTPエラーは0件です。公開URL **https://cadmium2525.github.io/command/** でも同じ **17 / 17 合格**でした。全173本・全216入力に加え、65秒の継続、4列消去後の続行、新しい完集リミックスの交代を公開版そのもので確認しています。
+Edgeで最終配布物を `/command/` に置いたブラウザー検証は **16 / 16 合格**。通常入力だけで全173ゲーム・全216コマンド・43空振り・18ジャンルを確認しました。旧管理者設定をONに残した状態でも、メニューは図鑑・探索・記録・設定の4つです。`#admin`、未発見再プレイ、未解放の探索操作、旧プレビュー操作から全開放されないことも検査しました。JavaScript実行エラーと同一オリジンのHTTPエラーは0件です。
+
+発見数4/5・86/87の境界で図鑑・探索一覧の解放を検証。173種類目の終了後にだけ完集ゲームが一度自動で始まり、以後は記録モーダルから再プレイできます。勝利は発見条件ではありません。公開URLでの再検証結果はデプロイ後に追記します。
+
+中央の準備案内は日本語に変更し、経過時計はTIME、短編の残り時計はLEFT、完集ゲームの交代秒数は「交代まで」と明示しました。
 
 ## 継続と終了の実動検査
 
@@ -38,7 +42,7 @@ $env:BROWSER_TEST_MOUNT='/command/'
 npm run test:browser
 ```
 
-検証対象のゲームコードは `443464bfb3ca86064779235f296d3a3b41b44c7c`、成功した公開は [Actions 40066859037](https://github.com/cadmium2525/command/actions/runs/40066859037) です。ログは `.qa/longplay-check.log`、`.qa/browser-results-longplay-local.json`、`.qa/browser-results-longplay-public.json`。ブラウザーrevisionは `arcade-long-play-remix-2026-10-24`、previewedは173件、commandsExercisedは216件、familyScreenshotsは18件です。
+ローカルの証拠は `.qa/browser-results-public-release-local.json`。ブラウザーrevisionは `public-arcade-no-admin-2026-10-24`、gamesStartedは173件、commandsExercisedは216件、familyScreenshotsは18件です。以前の管理者プレビュー版の検証件数は流用していません。
 
 画面確認には `arcade-blocks-four-lines-continues-390.png`、`arcade-unlimited-65s-390.png`、`arcade-completion-remix-switch-390.png`、18ジャンルの画像、320/390/768/1280幅と横画面の画像を使用しました。テストは独立ブラウザーで行い、利用者の保存記録を変えません。X Intentはテスト内で応答を置換し、投稿は実行しません。
 

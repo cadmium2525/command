@@ -7,7 +7,7 @@ body{background:#171d19;color:#e4e6d8;min-height:100svh}
 .console-page .controller{padding:19px 15px 18px}
 .console-page .screen-status{min-height:35px;line-height:1.8;margin:7px 0 10px;gap:12px}
 .screen-status #console-notice{font-size:9px;letter-spacing:.5px;max-width:90%;overflow-wrap:anywhere}
-.console-menu{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px;border-top:1px solid #46513e;margin-top:20px;padding-top:10px}
+.console-menu{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;border-top:1px solid #46513e;margin-top:20px;padding-top:10px}
 .console-menu button{min-height:46px;min-width:44px;color:#b8c3ac;border:0;border-radius:4px;background:none;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:5px;font-size:10px}
 .console-menu button:hover{background:#3a4633;color:#ffe0a1}
 .console-menu svg{width:17px;height:17px}
@@ -42,7 +42,6 @@ body{background:#171d19;color:#e4e6d8;min-height:100svh}
 .modal-content .discovery-grid{grid-template-columns:repeat(29,1fr)}
 .modal-content .settings-actions{padding-bottom:18px}
 .modal-content .explorer-grid{margin-top:18px}
-.explorer-title{display:block;letter-spacing:0;font-size:9px;font-family:inherit;font-weight:400;line-height:1.6;margin-top:8px;overflow-wrap:anywhere}
 .modal-content .help-content p{font-size:13px;line-height:2}
 .modal-notice{margin:0 24px;font-size:12px;line-height:1.9;color:#637c51}
 .modal-notice:not(:empty){padding:12px 0;border-bottom:1px solid #d6ddcc}

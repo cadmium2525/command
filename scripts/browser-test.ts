@@ -8,7 +8,7 @@ import type { GameEvent } from '../src/data/types';
 import { ARCADE_FAMILIES, FAMILY_LABELS } from '../src/events/arcade-types';
 import { SAVE_KEY } from '../src/core/storage';
 
-const REVISION = 'arcade-long-play-remix-2026-10-24';
+const REVISION = 'public-arcade-no-admin-2026-10-24';
 // Serve only the project subpath; no development server or SPA fallback can hide 404s.
 const root = resolve('dist');
 const mount = process.env.BROWSER_TEST_MOUNT || '/secret-start/';
@@ -32,7 +32,7 @@ if (!url) {
 }
 const channel = process.env.PLAYWRIGHT_CHANNEL;
 const results: {name:string;status:'PASS'|'FAIL';error?:string}[] = [];
-const errors: string[] = [], failedRequests: string[] = [], previewed: string[] = [], commandsExercised: string[] = [];
+const errors: string[] = [], failedRequests: string[] = [], gamesStarted: string[] = [], commandsExercised: string[] = [];
 const familyScreenshots: string[] = [];
 let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
 let currentPage: Page | undefined;
@@ -48,12 +48,14 @@ await mkdir('.qa', { recursive:true });
 try {
   const previous = await readFile('.qa/browser-results.json','utf8');
   if (JSON.parse(previous).uiRevision !== REVISION) {
-    try { await writeFile('.qa/browser-results-before-arcade.json',previous,{ flag:'wx' }); } catch {}
+    try { await writeFile('.qa/browser-results-before-public-release.json',previous,{ flag:'wx' }); } catch {}
   }
 } catch {}
 try {
   browser = await chromium.launch({ headless:true,...(channel ? { channel } : {}) });
   const context = await browser.newContext({ viewport:{ width:390,height:844 },isMobile:true,hasTouch:true,reducedMotion:'reduce' });
+  // A stale development preference must never open the published collection.
+  await context.addInitScript(() => localStorage.setItem('secret-start.admin-preview','on'));
   const page = await context.newPage(); currentPage = page;
   page.setDefaultTimeout(10_000);
   page.on('pageerror',error => errors.push(error.message));
@@ -116,7 +118,8 @@ try {
     assert.equal(await page.locator('#app > main > .console').count(),1);
     assert.equal(await page.locator('.site-header,.footer,.game-aside,.intro').count(),0);
     assert.equal(await page.locator('dialog[open]').count(),0);
-    assert.equal(await page.locator('.console-menu [data-modal]').count(),5);
+    assert.equal(await page.locator('.console-menu [data-modal]').count(),4);
+    assert.equal(await page.locator('[data-modal="admin"],#admin-toggle,[data-action="preview-ending"]').count(),0);
     assert.equal(await page.locator('#start-button').isDisabled(),true);
     await page.locator('[data-symbol="U"]').click(); await page.keyboard.press('ArrowUp');
     assert.equal(await page.locator('#start-button').isDisabled(),true);
@@ -130,43 +133,100 @@ try {
     assert.equal((await saved()).discoveredEventIds.length,1);
     await assertHiddenTitle(EVENTS.find(event => event.command === 'UUU')!);
     await leaveGame(); assert.equal(await page.locator('#input-count').textContent(),'0');
+    // A discovered game still cannot be replayed until the library is unlocked.
+    await page.evaluate(eventId => { const button=document.createElement('button'); button.dataset.replay=eventId; document.querySelector('#app')!.append(button); button.click(); button.remove(); },EVENTS.find(event => event.command==='UUU')!.eventId);
+    assert.equal(await page.locator('.arcade-info').count(),0);
     await openModal('settings'); await dialog.locator('[data-action="reset"]').click();
     await page.locator('[data-action="reset-confirm"]').click(); await page.locator('[data-action="reset-confirm"]').click();
     await closeModal(); assert.equal((await saved()).discoveredEventIds.length,0);
   });
 
-  await run('5情報モーダル・フォーカス保持・Escape復帰・管理者初期ON', async () => {
-    for (const name of ['library','explorer','progress','settings','admin']) {
-      const trigger = page.locator(`.console-menu [data-modal="${name}"]`);
-      await trigger.click(); await dialog.waitFor({ state:'visible' });
-      assert.equal(await dialog.evaluate(element => element.matches(':modal')),true);
-      assert.equal(await page.evaluate(() => !!document.activeElement?.closest('#info-dialog')),true);
-      await page.keyboard.press('Tab'); assert.equal(await page.evaluate(() => !!document.activeElement?.closest('#info-dialog')),true);
+  await run('4情報モーダル・フォーカス保持・Escape復帰・管理操作を表示しない', async () => {
+    for (const name of ['library','explorer','progress','settings']) {
+      const trigger=page.locator(`.console-menu [data-modal="${name}"]`);
+      await trigger.click(); await dialog.waitFor({state:'visible'});
+      assert.equal(await dialog.evaluate(element=>element.matches(':modal')),true);
+      assert.equal(await page.evaluate(()=>!!document.activeElement?.closest('#info-dialog')),true);
+      await page.keyboard.press('Tab');
+      // Native dialogs may pass through browser chrome when the close button is the only tab stop.
+      // The background must remain inert even while document.activeElement is the body.
+      assert.equal(await page.evaluate(()=>!!document.activeElement?.closest('#info-dialog')||document.activeElement===document.body),true);
+      await page.evaluate(()=>document.querySelector<HTMLButtonElement>('.console-menu button')!.focus());
+      assert.equal(await page.evaluate(()=>!!document.activeElement?.closest('.console')),false);
+      if(await page.evaluate(()=>document.activeElement===document.body)){
+        await page.keyboard.press('Tab');
+        assert.equal(await page.evaluate(()=>!!document.activeElement?.closest('#info-dialog')),true);
+      }
+      assert.equal(await page.locator('[data-modal="admin"],#admin-toggle,[data-action="preview-ending"]').count(),0);
       await page.keyboard.press('Escape');
-      await page.waitForFunction(() => !document.querySelector<HTMLDialogElement>('#info-dialog')?.open && (!location.hash || location.hash === '#home'));
-      assert.equal(await trigger.evaluate(element => element === document.activeElement),true);
+      await page.waitForFunction(()=>!document.querySelector<HTMLDialogElement>('#info-dialog')?.open&&(!location.hash||location.hash==='#home'));
+      assert.equal(await trigger.evaluate(element=>element===document.activeElement),true);
     }
-    await openModal('admin'); assert.equal(await dialog.locator('#admin-toggle').isChecked(),true); await closeModal();
   });
 
-  await run('管理者の全173件がゲームとして起動・18ジャンルの画面・収集記録は不変', async () => {
-    await openModal('library'); assert.equal(await dialog.locator('.event-card').count(),173);
-    assert.equal(await dialog.locator('#category option').count(),19);
-    const original = await rawSave();
-    for (const event of EVENTS) {
-      await replay(event); await assertHiddenTitle(event); await startReadyGame();
-      if (event.game.variant === 0) {
-        await page.waitForTimeout(950);
-        await screenshot(`family-${event.game.family}-390`); familyScreenshots.push(event.game.family);
-      }
-      await page.evaluate(() => { for (const key of ['L','R','U','D','A','B']) document.querySelector<HTMLButtonElement>(`[data-symbol="${key}"]`)!.click(); });
-      await leaveGame(event); await dialog.waitFor({ state:'visible' }); previewed.push(event.eventId);
+  await run('旧管理者フラグと#adminで解禁されず未発見再プレイと未解禁操作を拒否', async () => {
+    await page.goto(`${url}#admin`); await page.reload(); await canvas.waitFor();
+    assert.equal(await page.locator('dialog[open]').count(),0);
+    assert.equal(await page.locator('[data-modal="admin"],#admin-toggle,[data-action="preview-ending"]').count(),0);
+    assert.equal((await saved()).discoveredEventIds.length,0);
+    await page.evaluate(()=>history.replaceState(null,'','#home'));
+    await openModal('library'); assert.equal(await dialog.locator('.event-card').count(),0); assert.match(await dialog.textContent()||'',/5個の発見/); await closeModal();
+    await openModal('explorer'); assert.equal(await dialog.locator('.explorer-cell').count(),0); assert.match(await dialog.textContent()||'',/87個の発見/); await closeModal();
+    await openModal('progress'); assert.equal(await dialog.locator('[data-action="completion"]').count(),0); await closeModal();
+    const original=await rawSave();
+    // Exercise the production click guards using stale controls, without any debug hook.
+    for (const dataset of [{replay:EVENTS[0].eventId},{command:EVENTS[0].command},{action:'completion'},{action:'preview-ending'},{modal:'admin'}]) {
+      await page.evaluate(data=>{const button=document.createElement('button');Object.assign(button.dataset,data);document.querySelector('#app')!.append(button);button.click();button.remove();},dataset);
+      assert.equal(await page.locator('.arcade-info').count(),0);
+      assert.equal(await page.locator('dialog[open]').count(),0);
+      assert.equal(await page.locator('#input-count').textContent(),'0');
     }
-    assert.equal(previewed.length,173); assert.equal(new Set(previewed).size,173);
+    assert.equal(await rawSave(),original);
+  });
+
+  await run('通常モード全216入力・173ゲーム/43空振り・全発見ボーナス', async () => {
+    const boundaries = new Set<number>(); let bonusSeen = false;
+    for (const entry of COMMANDS) {
+      await setCommand(entry.command); commandsExercised.push(entry.command);
+      const snapshot = await saved(),count = snapshot.discoveredEventIds.length;
+      if (entry.eventId) {
+        const event=EVENTS.find(item=>item.eventId===entry.eventId)!;
+        await assertHiddenTitle(event); await startReadyGame(); gamesStarted.push(event.eventId);
+        if(event.game.variant===0){await page.waitForTimeout(950);await screenshot(`family-${event.game.family}-390`);familyScreenshots.push(event.game.family);}
+        await page.evaluate(()=>{for(const key of ['L','R','U','D','A','B'])document.querySelector<HTMLButtonElement>(`[data-symbol="${key}"]`)!.click();});
+      }
+      else { assert.equal(await result.isVisible(),true); assert.equal(await page.locator('#result-title').textContent(),'空振り'); }
+      await leaveGame();
+      if (await page.locator('.arcade-info').count()) {
+        assert.equal(count,173,'completion must not start before all discoveries');
+        assert.equal(bonusSeen,false,'automatic completion starts only once');
+        await waitForGame(); await assertHiddenTitle(TRUE_ENDING); await screenshot('completion-ready-390');
+        await leaveGame(TRUE_ENDING); bonusSeen = true;
+      }
+      if ([4,5,86,87].includes(count) && !boundaries.has(count)) {
+        boundaries.add(count); await openModal('library'); assert.equal(await dialog.locator('.event-card').count(),count<5 ? 0 : count);
+        if(count===5){
+          const unknown=EVENTS.find(event=>!snapshot.discoveredEventIds.includes(event.eventId))!;
+          await page.evaluate(eventId=>{const button=document.createElement('button');button.dataset.replay=eventId;document.querySelector('#app')!.append(button);button.click();button.remove();},unknown.eventId);
+          assert.equal(await page.locator('.arcade-info').count(),0,'unfound game cannot be replayed after library unlock');
+          assert.equal(await dialog.locator('.event-card').count(),5);
+        }
+        await closeModal();
+        await openModal('explorer'); assert.equal(await dialog.locator('.explorer-cell').count(),count<87 ? 0 : 216);
+        if (count===87) {
+          const unknown = dialog.locator('.explorer-cell:not(.found):not(.miss)');
+          assert.equal(await unknown.count(),216-snapshot.attemptedCommands.length); assert.equal(await dialog.locator('.explorer-title').count(),0);
+          for (const label of await unknown.allTextContents()) assert.match(label,/未入力/);
+        }
+        await closeModal();
+      }
+    }
+    const snapshot = await saved();
+    assert.equal(gamesStarted.length,173); assert.equal(new Set(gamesStarted).size,173);
     assert.deepEqual([...familyScreenshots].sort(),[...ARCADE_FAMILIES].sort());
-    assert.equal(await rawSave(),original); assert.equal((await saved()).discoveredEventIds.length,0);
-    await closeModal(); await openModal('explorer');
-    assert.equal(await dialog.locator('.explorer-cell').count(),216); assert.equal(await dialog.locator('.explorer-title').count(),216); await closeModal();
+    assert.equal(commandsExercised.length,216); assert.equal(snapshot.attemptedCommands.length,216); assert.equal(snapshot.discoveredEventIds.length,173);
+    assert.equal(snapshot.completionSeen,true); assert.equal(bonusSeen,true); assert.deepEqual([...boundaries].sort((a,b)=>a-b),[4,5,86,87]);
+    await openModal('progress'); assert.equal(await dialog.locator('[role="progressbar"]').getAttribute('aria-valuenow'),'173'); await closeModal();
   });
 
   await run('1/3落ちものを実操作で積み上げ自然GAME OVER・タイトル保持・再挑戦', async () => {
@@ -190,7 +250,7 @@ try {
     assert.equal(await result.isVisible(),true); assert.equal(await page.locator('#result-score').textContent(),score);
     await page.locator('[data-action="retry"]').click(); await waitForGame(); await assertHiddenTitle(event);
     assert.equal(await canvas.getAttribute('data-score'),'0');
-    await leaveGame(event); await closeModal(); assert.equal((await saved()).discoveredEventIds.length,0);
+    await leaveGame(event); await closeModal(); assert.equal((await saved()).discoveredEventIds.length,173);
   });
 
   await run('操作モーダルにはルールだけ・ゲーム時計を停止・閉じると再開', async () => {
@@ -221,7 +281,9 @@ try {
 
 
   await run('通常版は65秒後も続行・棒で4列消しても終了しない・完集はゲームが切り替わる', async () => {
+    const completeFixture=await saved();
     const longContext=await browser!.newContext({viewport:{width:390,height:844},reducedMotion:'reduce'});
+    await longContext.addInitScript(({key,data})=>localStorage.setItem(key,JSON.stringify(data)),{key:SAVE_KEY,data:completeFixture});
     try{
       const longPage=await longContext.newPage();longPage.on('pageerror',e=>errors.push(e.message));await longPage.clock.install();await longPage.goto(url);
       const longDialog=longPage.locator('#info-dialog'),longCanvas=longPage.locator('#game-canvas'),longResult=longPage.locator('#game-result');
@@ -237,48 +299,15 @@ try {
       await longPage.screenshot({path:'.qa/arcade-blocks-four-lines-continues-390.png',fullPage:true});
       await longPage.evaluate(()=>{for(let i=0;i<30&&document.querySelector<HTMLElement>('#game-result')!.hidden;i++)document.querySelector<HTMLButtonElement>('[data-symbol="B"]')!.click();});
       assert.equal(await longPage.locator('#result-status').textContent(),'GAME OVER');await exit();
-      await longPage.locator('.console-menu [data-modal="admin"]').click();await longDialog.locator('[data-action="preview-ending"]').click();await longPage.locator('#anticipation').waitFor({state:'detached'});await longPage.locator('#start-button[data-action="advance"]').click();
-      assert.match(await longPage.locator('#scene-detail').textContent()||'',/落ちもの/);await longPage.clock.runFor(18500);
+      await longPage.locator('.console-menu [data-modal="progress"]').click();await longDialog.locator('[data-action="completion"]').click();await longPage.locator('#anticipation').waitFor({state:'detached'});await longPage.locator('#start-button[data-action="advance"]').click();
+      assert.match(await longPage.locator('#scene-detail').textContent()||'',/落ちもの/);await longPage.clock.runFor(14500);
+      await longPage.screenshot({path:'.qa/arcade-completion-remix-transition-390.png',fullPage:true});await longPage.clock.runFor(4000);
       assert.equal(await longResult.isVisible(),false);assert.match(await longPage.locator('#scene-detail').textContent()||'',/シューティング/);assert.ok(Number(await longCanvas.getAttribute('data-score'))>0);
       await longPage.screenshot({path:'.qa/arcade-completion-remix-switch-390.png',fullPage:true});
     }finally{await longContext.close();}
   });
 
-  await run('管理者OFFを保持・通常の5/87発見解禁へ戻る', async () => {
-    await openModal('admin'); await dialog.locator('#admin-toggle').uncheck(); await closeModal(); await page.reload(); await canvas.waitFor();
-    await openModal('admin'); assert.equal(await dialog.locator('#admin-toggle').isChecked(),false); await closeModal();
-    await openModal('library'); assert.equal(await dialog.locator('.event-card').count(),0); assert.match(await dialog.textContent() || '',/5個の発見/); await closeModal();
-    await openModal('explorer'); assert.equal(await dialog.locator('.explorer-cell').count(),0); assert.match(await dialog.textContent() || '',/87個の発見/); await closeModal();
-  });
 
-  await run('通常モード全216入力・173ゲーム/43空振り・全発見ボーナス', async () => {
-    const boundaries = new Set<number>(); let bonusSeen = false;
-    for (const entry of COMMANDS) {
-      await setCommand(entry.command); commandsExercised.push(entry.command);
-      const snapshot = await saved(),count = snapshot.discoveredEventIds.length;
-      if (entry.eventId) await assertHiddenTitle(EVENTS.find(event => event.eventId === entry.eventId)!);
-      else { assert.equal(await result.isVisible(),true); assert.equal(await page.locator('#result-title').textContent(),'空振り'); }
-      await leaveGame();
-      if (await page.locator('.arcade-info').count()) {
-        await waitForGame(); await assertHiddenTitle(TRUE_ENDING); await screenshot('completion-ready-390');
-        await leaveGame(TRUE_ENDING); bonusSeen = true;
-      }
-      if ([4,5,86,87].includes(count) && !boundaries.has(count)) {
-        boundaries.add(count); await openModal('library'); assert.equal(await dialog.locator('.event-card').count(),count<5 ? 0 : count); await closeModal();
-        await openModal('explorer'); assert.equal(await dialog.locator('.explorer-cell').count(),count<87 ? 0 : 216);
-        if (count===87) {
-          const unknown = dialog.locator('.explorer-cell:not(.found):not(.miss)');
-          assert.equal(await unknown.count(),216-snapshot.attemptedCommands.length); assert.equal(await dialog.locator('.explorer-title').count(),0);
-          for (const label of await unknown.allTextContents()) assert.match(label,/未入力/);
-        }
-        await closeModal();
-      }
-    }
-    const snapshot = await saved();
-    assert.equal(commandsExercised.length,216); assert.equal(snapshot.attemptedCommands.length,216); assert.equal(snapshot.discoveredEventIds.length,173);
-    assert.equal(snapshot.completionSeen,true); assert.equal(bonusSeen,true); assert.deepEqual([...boundaries].sort((a,b)=>a-b),[4,5,86,87]);
-    await openModal('progress'); assert.equal(await dialog.locator('[role="progressbar"]').getAttribute('aria-valuenow'),'173'); await closeModal();
-  });
 
   await run('発見保持・探索216枠と43空振り・図鑑ジャンル18分類/検索/お気に入り', async () => {
     await page.reload(); assert.equal((await saved()).discoveredEventIds.length,173);
@@ -329,21 +358,22 @@ try {
       assert.equal(geometry.scroll,geometry.width,`${size.width}px horizontal overflow`);
       for (const button of geometry.buttons) assert.ok(button.width>=44 && button.height>=44,JSON.stringify(button));
       await screenshot(`title-${size.width}x${size.height}`);
-      for (const name of ['library','explorer','progress','settings','admin']) {
+      for (const name of ['library','explorer','progress','settings']) {
         await openModal(name); assert.equal(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth+1),true,`${name} overflow at ${size.width}`); assert.equal(await dialog.locator('.modal-close').isVisible(),true); await closeModal();
       }
     }
     await page.setViewportSize({ width:390,height:844 });
   });
 
-  await run('二段階消去の取消/確定・別タブ反映・管理者設定は独立', async () => {
+  await run('二段階消去の取消/確定・別タブ反映・消去後は通常の解禁条件', async () => {
     const other = await context.newPage(); await other.goto(url); await other.locator('#game-canvas').waitFor();
     await openModal('settings'); await dialog.locator('[data-action="reset"]').click(); await page.locator('[data-action="reset-confirm"]').click(); await page.locator('[data-action="reset-cancel"]').click();
     assert.equal((await saved()).discoveredEventIds.length,173); assert.equal(await dialog.locator('[data-action="reset"]').evaluate(element => element === document.activeElement),true);
     await dialog.locator('[data-action="reset"]').click(); await page.locator('[data-action="reset-confirm"]').click(); await page.locator('[data-action="reset-confirm"]').click();
     assert.equal((await saved()).discoveredEventIds.length,0); await other.waitForFunction(key => JSON.parse(localStorage.getItem(key) || '{}').discoveredEventIds?.length===0,SAVE_KEY);
     await other.locator('[data-action="sound"]').click(); assert.equal((await saved()).discoveredEventIds.length,0); await other.close(); await closeModal();
-    await openModal('admin'); assert.equal(await dialog.locator('#admin-toggle').isChecked(),false); await closeModal();
+    await openModal('library'); assert.equal(await dialog.locator('.event-card').count(),0); await closeModal();
+    assert.equal(await page.locator('[data-modal="admin"],#admin-toggle,[data-action="preview-ending"]').count(),0);
   });
 
   await run('破損保存を警告・原本を退避して新ゲームの発見を保存', async () => {
@@ -364,6 +394,6 @@ try {
   assert.deepEqual(errors,[]); assert.deepEqual(failedRequests,[]);
   console.log(`Browser checks: ${results.length}/${results.length} PASS; zero script errors or project 404s.`);
 } finally {
-  await writeFile('.qa/browser-results.json',JSON.stringify({ uiRevision:REVISION,completedAt:new Date().toISOString(),url,channel:channel || 'chromium',coverage:{ previewed,commandsExercised,familyScreenshots },results,errors,failedRequests },null,2));
+  await writeFile('.qa/browser-results.json',JSON.stringify({ uiRevision:REVISION,completedAt:new Date().toISOString(),url,channel:channel || 'chromium',coverage:{ gamesStarted,commandsExercised,familyScreenshots },results,errors,failedRequests },null,2));
   await browser?.close(); if (server.listening) await new Promise<void>(done => server.close(() => done()));
 }

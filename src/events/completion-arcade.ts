@@ -21,11 +21,11 @@ const CARTRIDGES: readonly ArcadeDefinition[] = COMPLETION_FAMILIES.map(family =
   return definition;
 });
 const SHORT_CONTROLS: Partial<Record<ArcadeFamily, string>> = {
-  blocks: 'L/R MOVE   A ROTATE   B DROP',
-  invaders: 'L/R MOVE   A SHOOT   B SHIELD',
-  snake: 'ARROWS TURN   A STEP   B SLOW',
-  breakout: 'L/R MOVE   A SERVE   B SLOW',
-  runner: 'UP/A JUMP   DOWN/B DUCK',
+  blocks: '←→ 移動　A 回転　B 一気に落下',
+  invaders: '←→ 移動　A 発射　B シールド',
+  snake: '方向 転換　A 1マス進む　B 減速',
+  breakout: '←→ ラケット　A 発射　B 減速',
+  runner: '↑・A ジャンプ　↓・B かがむ',
 };
 type EngineFactory = (definition: ArcadeDefinition, seed: number) => ArcadeEngine;
 
@@ -134,13 +134,22 @@ export class CompletionArcade implements ArcadeEngine {
     pixelText(ctx, `LIFE ${this.lives}`, 310, 6, palette.pale, 1, 'right');
     pixelText(ctx, `${this.round + 1} ${this.definition.family.toUpperCase()}`, 8, 20, palette.light);
     pixelText(ctx, `X${this.speed.toFixed(1)}`, 173, 20, palette.ink, 1, 'center');
-    pixelText(ctx, `${Math.ceil(Math.max(0, this.sectionDuration - this.sectionTime))}S`, 310, 20, palette.light, 1, 'right');
+    ctx.save();
+    ctx.font = '9px system-ui, sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'top'; ctx.fillStyle = palette.light;
+    ctx.fillText(`交代まで ${Math.ceil(Math.max(0, this.sectionDuration - this.sectionTime))}秒`, 310, 19);
+    ctx.restore();
     if (this.phase === 'ready') {
       ctx.fillStyle = '#080e12e8'; ctx.fillRect(13, 43, 294, 125);
-      pixelText(ctx, this.transitionMessage.startsWith('ミス') ? 'ONE LIFE LOST' : 'NICE PLAY!', 160, 55, palette.light, 1, 'center');
-      pixelText(ctx, `NEXT: ${this.definition.family.toUpperCase()}`, 160, 76, palette.pale, 2, 'center');
-      pixelText(ctx, SHORT_CONTROLS[this.definition.family] ?? '', 160, 105, palette.light, 1, 'center');
-      pixelText(ctx, 'READY... A TO START', 160, 128, palette.pale, 1, 'center');
+      ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = palette.light;
+      ctx.fillText(this.transitionMessage.startsWith('ミス') ? 'ミス！ ライフが1つ減りました' : '次のゲームへ交代します', 160, 54);
+      ctx.font = 'bold 16px system-ui, sans-serif'; ctx.fillStyle = palette.pale;
+      ctx.fillText(`次は ${FAMILY_LABELS[this.definition.family]}`, 160, 77);
+      ctx.font = '10px system-ui, sans-serif'; ctx.fillStyle = palette.light;
+      ctx.fillText(SHORT_CONTROLS[this.definition.family] ?? '', 160, 106);
+      ctx.fillStyle = palette.pale;
+      ctx.fillText('まもなく開始 ／ Aでも開始', 160, 130);
+      ctx.restore();
       ctx.fillStyle = palette.dark; ctx.fillRect(55, 149, 210, 3);
       ctx.fillStyle = palette.light; ctx.fillRect(55, 149, 210 * clamp(this.readyTime / 2, 0, 1), 3);
     }
