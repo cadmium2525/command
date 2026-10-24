@@ -8,7 +8,7 @@
 
 Edgeで最終配布物を `/command/` に置いたブラウザー検証は **16 / 16 合格**。通常入力だけで全173ゲーム・全216コマンド・43空振り・18ジャンルを確認しました。旧管理者設定をONに残した状態でも、メニューは図鑑・探索・記録・設定の4つです。`#admin`、未発見再プレイ、未解放の探索操作、旧プレビュー操作から全開放されないことも検査しました。JavaScript実行エラーと同一オリジンのHTTPエラーは0件です。
 
-発見数4/5・86/87の境界で図鑑・探索一覧の解放を検証。173種類目の終了後にだけ完集ゲームが一度自動で始まり、以後は記録モーダルから再プレイできます。勝利は発見条件ではありません。公開URLでの再検証結果はデプロイ後に追記します。
+発見数4/5・86/87の境界で図鑑・探索一覧の解放を検証。173種類目の終了後にだけ完集ゲームが一度自動で始まり、以後は記録モーダルから再プレイできます。勝利は発見条件ではありません。公開URL **https://cadmium2525.github.io/command/** でも同じ **16 / 16 合格**でした。公開版そのもので全216コマンド・173ゲーム、65秒の継続、4列消去後の続行、完集ゲームの交代、保存、オフラインを確認し、JavaScript実行エラーと同一オリジンのHTTPエラーは0件です。
 
 中央の準備案内は日本語に変更し、経過時計はTIME、短編の残り時計はLEFT、完集ゲームの交代秒数は「交代まで」と明示しました。
 
@@ -42,8 +42,10 @@ $env:BROWSER_TEST_MOUNT='/command/'
 npm run test:browser
 ```
 
-ローカルの証拠は `.qa/browser-results-public-release-local.json`。ブラウザーrevisionは `public-arcade-no-admin-2026-10-24`、gamesStartedは173件、commandsExercisedは216件、familyScreenshotsは18件です。以前の管理者プレビュー版の検証件数は流用していません。
+検証対象のゲームコードは `acf192e5393778c8d30d4e45ae0093b8ff2c4e5b`、成功した公開は [Actions 40078431161](https://github.com/cadmium2525/command/actions/runs/40078431161) です。
 
-画面確認には `arcade-blocks-four-lines-continues-390.png`、`arcade-unlimited-65s-390.png`、`arcade-completion-remix-switch-390.png`、18ジャンルの画像、320/390/768/1280幅と横画面の画像を使用しました。テストは独立ブラウザーで行い、利用者の保存記録を変えません。X Intentはテスト内で応答を置換し、投稿は実行しません。
+証拠は `.qa/browser-results-public-release-local.json` と `.qa/browser-results-public-release-public.json`。ブラウザーrevisionは `public-arcade-no-admin-2026-10-24`、gamesStartedは173件、commandsExercisedは216件、familyScreenshotsは18件です。以前の管理者プレビュー版の検証件数は流用していません。
+
+画面確認には `arcade-blocks-four-lines-continues-390.png`、`arcade-unlimited-65s-390.png`、`arcade-completion-remix-switch-390.png`、`arcade-completion-remix-transition-390.png`、18ジャンルの画像、320/390/768/1280幅と横画面の画像を使用しました。テストは独立ブラウザーで行い、利用者の保存記録を変えません。X Intentはテスト内で応答を置換し、投稿は実行しません。
 
 実機iOS/Android、実際の音量、読み上げ機器での体験は今回の自動検証には含めていません。
