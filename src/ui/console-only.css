@@ -88,3 +88,24 @@ body{background:#171d19;color:#e4e6d8;min-height:100svh}
   .modal-content .library-grid{grid-template-columns:1fr}
   .console-page .screen-kicker{font-size:6px;letter-spacing:1.6px}
 }
+[hidden]{display:none!important}
+.game-result{position:absolute;inset:0;z-index:7;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px 18px;text-align:center;background:linear-gradient(#091310eb,#0b1914ed);border:2px solid #9cae7644;color:#f7df9f;animation:result-in .25s ease-out}
+.game-result>span{font-size:10px;letter-spacing:3px;color:#9faf8b}
+.game-result h1{font-family:inherit;font-size:clamp(19px,5.6vw,30px);font-weight:800;line-height:1.65;margin:10px 0 8px;text-wrap:balance;overflow-wrap:anywhere;text-shadow:2px 2px #0008}
+.game-result p{margin:2px 0;font-size:10px;letter-spacing:2px;color:#d2d2ab}
+.arcade-info{padding:10px 0 8px;border-bottom:1px solid #46513e}
+.arcade-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.arcade-heading .playing-title{font-size:10px;letter-spacing:1px;color:#b9c2a8}
+.arcade-heading button{min-height:44px;padding:3px 12px;border:1px solid #61714f;border-radius:4px;color:#c5cdb7;background:#35402e;font-size:11px}
+.arcade-rule{font-size:12px;line-height:1.75;margin:4px 0 6px;color:#ece2be}
+.arcade-controls{font-size:11px;line-height:1.85;min-height:36px;margin:3px 0;color:#bdcba9}
+.arcade-status{display:block;font-size:10px;line-height:1.7;color:#91a280}
+.arcade-info .play-progress{margin:7px 0 0}
+.is-playing .command-row{padding-top:10px}
+.is-playing .clear-button{font-size:10px;line-height:1.6;max-width:42%;padding-right:7px}
+.is-playing .controller{padding-top:13px;padding-bottom:13px}
+.is-playing .console-menu{margin-top:12px}
+@keyframes result-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.reduce-motion .game-result{animation:none}
+@media(prefers-reduced-motion:reduce){.game-result{animation:none}}
+@media(max-width:360px){.arcade-rule{font-size:11px}.arcade-controls{font-size:10px}.game-result h1{font-size:19px}.arcade-heading .playing-title{letter-spacing:0}}

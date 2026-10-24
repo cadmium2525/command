@@ -26,6 +26,7 @@ export interface GameEvent {
   palette: string;
   actor: Actor;
   prop: Actor;
+  game: ArcadeDefinition;
   mechanic?: string;
 }
 export interface CommandEntry { command: string; eventId: string | null }
@@ -40,6 +41,7 @@ export interface SaveData {
   completionSeen: boolean;
 }
 export const CATEGORY_LABELS: Record<Category, string> = {
-  remix: 'ふしぎな日常', gag: '一発ハプニング', story: 'ひみつの物語', minigame: 'あそべる世界', ending: 'もうひとつの結末',
+  remix: '旧日常枠', gag: '旧ハプニング枠', story: '旧物語枠', minigame: 'アーケード', ending: '旧結末枠',
 };
 export const displayCommand = (command: string) => [...command].map(s => SYMBOL_LABELS[s as InputSymbol]).join(' ');
+import type { ArcadeDefinition } from '../events/arcade-types';
