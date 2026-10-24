@@ -6,7 +6,7 @@
 
 単体テスト **90 / 90 合格**。TypeScriptの型検査、本番ビルド、配布物の参照先とService Workerの検査も成功しました。配布物は7ファイル、384.1 KiB、事前キャッシュ6件です。
 
-Edgeで最終配布物を `/command/` に置いたブラウザー検証は **17 / 17 合格**。全173プレビュー、全216入力、43空振り、18ジャンル、管理者モード、保存と移行、モーダル、画面サイズ、オフラインを確認しました。JavaScript実行エラーと同一オリジンのHTTPエラーは0件です。公開先の結果はデプロイ後に追記します。
+Edgeで最終配布物を `/command/` に置いたブラウザー検証は **17 / 17 合格**。全173プレビュー、全216入力、43空振り、18ジャンル、管理者モード、保存と移行、モーダル、画面サイズ、オフラインを確認しました。JavaScript実行エラーと同一オリジンのHTTPエラーは0件です。公開URL **https://cadmium2525.github.io/command/** でも同じ **17 / 17 合格**でした。全173本・全216入力に加え、65秒の継続、4列消去後の続行、新しい完集リミックスの交代を公開版そのもので確認しています。
 
 ## 継続と終了の実動検査
 
@@ -38,7 +38,7 @@ $env:BROWSER_TEST_MOUNT='/command/'
 npm run test:browser
 ```
 
-ログは `.qa/longplay-check.log` と `.qa/browser-results-longplay-local.json`。ブラウザーrevisionは `arcade-long-play-remix-2026-10-24`、previewedは173件、commandsExercisedは216件、familyScreenshotsは18件です。
+検証対象のゲームコードは `443464bfb3ca86064779235f296d3a3b41b44c7c`、成功した公開は [Actions 40066859037](https://github.com/cadmium2525/command/actions/runs/40066859037) です。ログは `.qa/longplay-check.log`、`.qa/browser-results-longplay-local.json`、`.qa/browser-results-longplay-public.json`。ブラウザーrevisionは `arcade-long-play-remix-2026-10-24`、previewedは173件、commandsExercisedは216件、familyScreenshotsは18件です。
 
 画面確認には `arcade-blocks-four-lines-continues-390.png`、`arcade-unlimited-65s-390.png`、`arcade-completion-remix-switch-390.png`、18ジャンルの画像、320/390/768/1280幅と横画面の画像を使用しました。テストは独立ブラウザーで行い、利用者の保存記録を変えません。X Intentはテスト内で応答を置換し、投稿は実行しません。
 
