@@ -207,11 +207,19 @@ test('variant differences change playable state, goals or valid actions rather t
   assert.equal(new Set(click.map(engine=>{const {variant,time,family,...state}=engine.snapshot;return JSON.stringify({state,score:engine.score});})).size,9,'clicking changes valid button, alternation, bank, heat, release, decay, gating or investment');
 });
 
-test('the gated clicker displays actual green GO and red WAIT in addition to its action cue',()=>{
+test('color recognition games display their stated green, red, blue and gray cues',()=>{
   const colors:string[]=[];
   const ctx=new Proxy({}, {get:()=>()=>{},set:(_target,key,value)=>{if(key==='fillStyle')colors.push(String(value));return true;}}) as CanvasRenderingContext2D;
   const game=createSkillGame(definitions('clicker')[6],3);
   game.draw(ctx,PALETTES.midnight,false);assert.ok(colors.includes('#78d79a'));
   colors.length=0;advance(game,.8);game.draw(ctx,PALETTES.midnight,false);assert.ok(colors.includes('#ed7a7a'));
   const before=game.score;game.input('A');assert.equal(game.score,before,'red WAIT does not reward a click');
+  const blue=createSkillGame(definitions('reaction')[5],3);
+  while(blue.snapshot.phase==='wait')blue.update(.01);
+  colors.length=0;blue.draw(ctx,PALETTES.amber,false);assert.ok(colors.includes('#8b9195'),'the decoy is gray even in the amber palette');
+  for(let i=0;i<1500&&blue.snapshot.phase!=='signal';i++)blue.update(.01);
+  colors.length=0;blue.draw(ctx,PALETTES.amber,false);assert.ok(colors.includes('#65baff'),'the valid signal is blue');
+  const green=createSkillGame(definitions('reaction')[3],3);
+  for(let i=0;i<1500&&green.snapshot.phase!=='signal';i++)green.update(.01);
+  colors.length=0;green.draw(ctx,PALETTES.amber,false);assert.ok(colors.includes('#78d79a'),'the valid signal is green');
 });
