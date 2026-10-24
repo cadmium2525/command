@@ -18,7 +18,7 @@ Edgeで最終配布物を `/command/` に置いたブラウザー検証は **18 
 - 検索中の表示領域縮小は `visualViewport` の高さ450px・350px、上端オフセット0px・24pxのスタブで再現。1件表示への切替、検索欄の同一DOM・フォーカス・文字入力・0件表示、解除後に通常件数へ戻ることを確認。これは実端末のキーボード操作ではありません。
 - 補助スモークでも8サイズ136状態、さらに540×739/740/741・600×740/741の境界5サイズ85状態を検査。
 
-公開URLでの同じ18項目の結果はデプロイ後に追記します。
+公開URL **https://cadmium2525.github.io/command/** でも同じ **18 / 18 合格**。全173ゲーム・216コマンド、8サイズの全モーダル全ページ、6ボタン復帰と長押し防止、検索中の表示領域縮小、保存とオフラインを確認しました。JavaScript実行エラーと同一オリジンのHTTPエラーは0件です。
 
 ## 継続と終了の実動検査
 
@@ -50,7 +50,9 @@ $env:BROWSER_TEST_MOUNT='/command/'
 npm run test:browser
 ```
 
-ローカルの証拠は `.qa/viewport-unit.log` と `.qa/browser-results-viewport-local.json`。ブラウザーrevisionは `one-viewport-paged-six-key-return-2026-10-24`、gamesStartedは173件、commandsExercisedは216件、familyScreenshotsは18件、layoutChecksは778件です。以前のスクロール版のブラウザー件数は流用していません。
+検証対象のゲームコードは `5d7023163d13d15d42cd446822e00efc19110344`、成功した公開は [Actions 40082490086](https://github.com/cadmium2525/command/actions/runs/40082490086) です。
+
+証拠は `.qa/viewport-unit.log`、`.qa/browser-results-viewport-local.json`、`.qa/browser-results-viewport-public.json`。ブラウザーrevisionは `one-viewport-paged-six-key-return-2026-10-24`、gamesStartedは173件、commandsExercisedは216件、familyScreenshotsは18件、layoutChecksは778件です。以前のスクロール版のブラウザー件数は流用していません。
 
 画面確認には `arcade-blocks-four-lines-continues-390.png`、`arcade-unlimited-65s-390.png`、`arcade-completion-remix-switch-390.png`、`arcade-completion-remix-transition-390.png`、18ジャンルの画像、8サイズの全モーダル・プレイ・結果・最長タイトル、`arcade-keyboard-450-390.png` と `arcade-keyboard-350-390.png`を使用しました。テストは独立ブラウザーで行い、利用者の保存記録を変えません。X Intentはテスト内で応答を置換し、投稿は実行しません。
 
