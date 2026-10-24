@@ -2,6 +2,7 @@ import { SYMBOLS, type CommandEntry, type GameEvent } from './types';
 import { PHYSICAL_DEFINITIONS } from '../events/arcade-physical';
 import { SKILL_DEFINITIONS } from '../events/arcade-skill';
 import type { ArcadeDefinition } from '../events/arcade-types';
+import { COMPLETION_DEFINITION } from '../events/completion-arcade';
 
 /** The engine owns every title, rule, control scheme and time limit. */
 export const ARCADE_DEFINITIONS: readonly ArcadeDefinition[] = [...PHYSICAL_DEFINITIONS, ...SKILL_DEFINITIONS];
@@ -55,13 +56,10 @@ export const EVENT_BY_ID = new Map<string, GameEvent>(EVENTS.map(event => [event
 export const EVENT_BY_COMMAND = new Map<string, GameEvent>(EVENTS.map(event => [event.command, event]));
 export const COMMANDS: CommandEntry[] = allCommands.map(command => ({ command, eventId: EVENT_BY_COMMAND.get(command)?.eventId ?? null }));
 
-/** A short playable completion bonus; it never consumes a collection address. */
-const completionGame = SKILL_DEFINITIONS.find(game => game.family === 'reaction' && game.variant === 0);
-if (!completionGame) throw new Error('SECRET START completion bonus requires reaction variant 0');
+/** A five-game endless remix; it never consumes a collection address. */
 export const TRUE_ENDING: GameEvent = {
-  ...makeArcadeEvent('true-ending', '', completionGame, 0),
-  title: '173のひみつ、全部見つけた！',
-  tags: ['completion', 'true-ending', 'reaction'],
+  ...makeArcadeEvent('true-ending', '', COMPLETION_DEFINITION, 0),
+  tags: ['completion', 'true-ending', 'arcade-remix'],
 };
 
 if (EVENTS.length !== 173 || COMMANDS.length !== 216 || EVENT_BY_COMMAND.size !== 173 || COMMANDS.filter(entry => entry.eventId === null).length !== 43) {

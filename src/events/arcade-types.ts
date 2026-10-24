@@ -10,12 +10,17 @@ export interface ArcadeDefinition {
   /** Instructions describe the task without revealing the title/punchline. */
   rule: string;
   controls: string;
+  /** Endless play, a whole board/boss, or an intentionally short title gag. */
+  playMode: 'endless'|'board'|'gag';
+  /** Zero means no time limit. Positive values are reserved for timed gags. */
   durationMs: number;
 }
-export interface ArcadeOutcome { status: 'win'|'lose'|'time'; reason: string }
+export interface ArcadeOutcome { status: 'win'|'lose'|'time'|'stopped'; reason: string }
 export interface ArcadeEngine {
   score: number;
   outcome: ArcadeOutcome|null;
+  /** Dynamic controls for a mode that changes games or stages. */
+  readonly instruction?: string;
   input(key: InputSymbol): void;
   /** Seconds, fixed step supplied by the player. */
   update(dt: number): void;

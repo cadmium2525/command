@@ -8,7 +8,7 @@ import type { GameEvent } from '../src/data/types';
 import { ARCADE_FAMILIES, FAMILY_LABELS } from '../src/events/arcade-types';
 import { SAVE_KEY } from '../src/core/storage';
 
-const REVISION = 'arcade-173-post-play-title-2026-10-24';
+const REVISION = 'arcade-long-play-remix-2026-10-24';
 // Serve only the project subpath; no development server or SPA fallback can hide 404s.
 const root = resolve('dist');
 const mount = process.env.BROWSER_TEST_MOUNT || '/secret-start/';
@@ -94,7 +94,7 @@ try {
   const assertHiddenTitle = async (event:GameEvent) => {
     assert.equal(await result.isVisible(),false,event.eventId);
     assert.equal(await page.locator('#result-title').textContent(),'');
-    assert.equal(await page.locator('.playing-title').textContent(),`MINI GAME · ${FAMILY_LABELS[event.game.family]}`);
+    assert.equal(await page.locator('.playing-title').textContent(),`MINI GAME · ${event.eventId===TRUE_ENDING.eventId?'アーケード・リミックス':FAMILY_LABELS[event.game.family]}`);
     assert.notEqual(await canvas.getAttribute('aria-label'),event.title);
     assert.equal((await page.locator('.arcade-info').textContent() || '').includes(event.title),false,event.eventId);
     assert.equal(await canvas.getAttribute('data-family'),event.game.family);
@@ -198,10 +198,10 @@ try {
     await page.waitForTimeout(250); await page.locator('.arcade-info [data-modal="rules"]').click(); await dialog.waitFor({ state:'visible' });
     assert.equal((await dialog.textContent() || '').includes(EVENTS[0].title),false);
     assert.ok((await dialog.textContent() || '').includes(EVENTS[0].game.rule));
-    const before = await page.locator('.play-progress').getAttribute('aria-valuenow');
-    await page.waitForTimeout(2300); assert.equal(await page.locator('.play-progress').getAttribute('aria-valuenow'),before);
+    const before = await canvas.getAttribute('data-elapsed');
+    await page.waitForTimeout(2300); assert.equal(await canvas.getAttribute('data-elapsed'),before);
     await page.goBack(); await dialog.waitFor({ state:'hidden' });
-    await page.waitForFunction(value => document.querySelector('.play-progress')?.getAttribute('aria-valuenow') !== value,before);
+    await page.waitForFunction(value => document.querySelector<HTMLCanvasElement>('#game-canvas')?.dataset.elapsed !== value,before);
     await leaveGame(EVENTS[0]); await closeModal();
   });
 
@@ -217,6 +217,31 @@ try {
     for (const key of ['ArrowLeft','ArrowUp','ArrowRight','ArrowDown','b']) await page.keyboard.press(key);
     await page.waitForFunction(() => Number(document.querySelector<HTMLCanvasElement>('#game-canvas')?.dataset.score || 0) > 0);
     await screenshot('blocks-placed-390'); await leaveGame(blocks); await closeModal();
+  });
+
+
+  await run('通常版は65秒後も続行・棒で4列消しても終了しない・完集はゲームが切り替わる', async () => {
+    const longContext=await browser!.newContext({viewport:{width:390,height:844},reducedMotion:'reduce'});
+    try{
+      const longPage=await longContext.newPage();longPage.on('pageerror',e=>errors.push(e.message));await longPage.clock.install();await longPage.goto(url);
+      const longDialog=longPage.locator('#info-dialog'),longCanvas=longPage.locator('#game-canvas'),longResult=longPage.locator('#game-result');
+      const launch=async(event:GameEvent)=>{await longPage.locator('.console-menu [data-modal="library"]').click();await longDialog.locator(`[data-replay="${event.eventId}"]`).evaluate((e:HTMLButtonElement)=>e.click());await longPage.locator('#anticipation').waitFor({state:'detached'});await longPage.locator('#start-button[data-action="advance"]').click();};
+      const exit=async()=>{if(!await longResult.isVisible())await longPage.locator('[data-action="skip"]').click();await longPage.locator('#start-button[data-action="return"]').click();await longDialog.locator('[data-action="close-modal"]').click();await longPage.waitForFunction(()=>!location.hash||location.hash==='#home');};
+      const idleGame=EVENTS.find(e=>e.game.family==='fishing'&&e.game.variant===1)!;
+      await launch(idleGame);await longPage.clock.runFor(65000);
+      assert.equal(await longCanvas.getAttribute('data-phase'),'playing');assert.ok(Number(await longCanvas.getAttribute('data-elapsed'))>=64000);assert.equal(await longResult.isVisible(),false);assert.equal(await longPage.locator('.play-progress').isVisible(),false);
+      await longPage.screenshot({path:'.qa/arcade-unlimited-65s-390.png',fullPage:true});await exit();
+      const bars=EVENTS.find(e=>e.game.family==='blocks'&&e.game.variant===4)!;await launch(bars);
+      await longPage.evaluate(()=>{for(let column=0;column<10;column++){for(const key of ['A',...Array(20).fill('L'),...Array(column).fill('R'),'B'])document.querySelector<HTMLButtonElement>(`[data-symbol="${key}"]`)!.click();}});
+      assert.equal(await longResult.isVisible(),false);assert.ok(Number(await longCanvas.getAttribute('data-score'))>=400,'a four-line clear scores and the game continues');
+      await longPage.screenshot({path:'.qa/arcade-blocks-four-lines-continues-390.png',fullPage:true});
+      await longPage.evaluate(()=>{for(let i=0;i<30&&document.querySelector<HTMLElement>('#game-result')!.hidden;i++)document.querySelector<HTMLButtonElement>('[data-symbol="B"]')!.click();});
+      assert.equal(await longPage.locator('#result-status').textContent(),'GAME OVER');await exit();
+      await longPage.locator('.console-menu [data-modal="admin"]').click();await longDialog.locator('[data-action="preview-ending"]').click();await longPage.locator('#anticipation').waitFor({state:'detached'});await longPage.locator('#start-button[data-action="advance"]').click();
+      assert.match(await longPage.locator('#scene-detail').textContent()||'',/落ちもの/);await longPage.clock.runFor(18500);
+      assert.equal(await longResult.isVisible(),false);assert.match(await longPage.locator('#scene-detail').textContent()||'',/シューティング/);assert.ok(Number(await longCanvas.getAttribute('data-score'))>0);
+      await longPage.screenshot({path:'.qa/arcade-completion-remix-switch-390.png',fullPage:true});
+    }finally{await longContext.close();}
   });
 
   await run('管理者OFFを保持・通常の5/87発見解禁へ戻る', async () => {

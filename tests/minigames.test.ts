@@ -10,8 +10,8 @@ test('all 18 game families have a concrete engine and all 173 variants are reach
 });
 
 test('timeouts freeze the simulation and preserve the last score for the title reveal',()=>{
-  const event=EVENTS.find(e=>e.game.family==='memory')!;
-  const game=new ArcadeGame(event.game,173,20);
+  const event=EVENTS.find(e=>e.game.family==='fishing'&&e.game.variant===1)!;
+  const game=new ArcadeGame({...event.game,playMode:'gag',durationMs:20},173);
   game.update(.01);game.update(.02);assert.ok(game.outcome);const final=game.snapshot;
   game.input('A');game.update(10);assert.deepEqual(game.snapshot,final);
 });
@@ -23,4 +23,13 @@ test('replaying a variant with the same seed and inputs is deterministic and iso
     for(let i=0;i<180;i++){if(i%13===0){const key=(['U','D','L','R','A','B'] as const)[Math.floor(i/13)%6];a.input(key);b.input(key);}a.update(1/60);b.update(1/60);}
     assert.deepEqual(a.snapshot,b.snapshot,family);const before=b.snapshot;a.finish();assert.deepEqual(b.snapshot,before,`${family} instances do not share state`);
   }
+});
+
+
+test('unlimited sessions do not inherit the old universal deadline and manual finish is explicit',()=>{
+  const event=EVENTS.find(e=>e.game.family==='fishing'&&e.game.variant===1)!;
+  const game=new ArcadeGame(event.game,173);
+  for(let frame=0;frame<7200;frame++)game.update(1/120);
+  assert.equal(game.outcome,null);game.finish();assert.equal(game.snapshot.outcome?.status,'stopped');
+  const final=game.snapshot;game.update(60);game.input('R');assert.deepEqual(game.snapshot,final);
 });

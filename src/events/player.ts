@@ -33,13 +33,15 @@ export class ScenePlayer {
     this.options.onBeat?.({at:0,text:event.game.rule,action:'play'},0);
     this.draw();this.report();this.schedule();
   }
-  get progress(){return this.finished?1:clamp(this.elapsed/this.event.durationMs,0,1);}
+  get progress(){return this.finished?1:this.event.durationMs>0?clamp(this.elapsed/this.event.durationMs,0,1):0;}
   get currentBeatIndex(){return 0;}
   get totalBeats(){return 1;}
   get durationMs(){return this.event.durationMs;}
   get isComplete(){return this.finished;}
   get result(){return this.game.outcome;}
   get score(){return this.game.score;}
+  get instruction(){return this.game.instruction;}
+  get currentFamily(){const family=this.game.snapshot.activeFamily;return typeof family==='string'?family:this.event.game.family;}
   get snapshot(){const state=this.game.snapshot;return {...state,enginePhase:state.phase,phase:this.finished?'result':this.ready?'ready':'playing'};}
   input(key:InputSymbol|'START'){
     if(this.disposed||this.finished||this.paused)return;
@@ -61,9 +63,9 @@ export class ScenePlayer {
   private report(){
     this.reportAt=this.elapsed;
     const detail=this.finished?`${this.game.outcome?.reason??''}　SCORE ${this.game.score}`
-      :`${this.ready?'準備中 · ボタンで開始 / ':''}${this.event.game.controls}　SCORE ${this.game.score}`;
+      :`${this.ready?'準備中 · ボタンで開始 / ':''}${this.game.instruction}　SCORE ${this.game.score}`;
     this.options.onProgress?.(this.progress,detail);
-    if(this.canvas.dataset){this.canvas.dataset.phase=this.finished?'result':this.ready?'ready':'playing';this.canvas.dataset.family=this.event.game.family;this.canvas.dataset.variant=String(this.event.game.variant);this.canvas.dataset.score=String(this.game.score);}
+    if(this.canvas.dataset){this.canvas.dataset.phase=this.finished?'result':this.ready?'ready':'playing';this.canvas.dataset.family=this.event.game.family;this.canvas.dataset.variant=String(this.event.game.variant);this.canvas.dataset.score=String(this.game.score);this.canvas.dataset.elapsed=String(Math.floor(this.elapsed));this.canvas.dataset.playMode=this.event.game.playMode;}
   }
   private tick=(now:number)=>{
     this.frame=0;if(this.disposed||this.paused||this.finished)return;
@@ -87,7 +89,8 @@ export class ScenePlayer {
     this.game.draw(ctx,p,this.options.reducedMotion);
     // Leave the engine's score, lives, ammunition and goals readable at the sides.
     ctx.fillStyle=p.bg;ctx.fillRect(141,0,38,19);
-    pixelText(ctx,`${Math.ceil(Math.max(0,this.event.durationMs-this.elapsed)/1000)}S`,160,7,p.light,1,'center');
+    const seconds=Math.floor(this.elapsed/1000),clock=this.event.durationMs>0?`${Math.ceil(Math.max(0,this.event.durationMs-this.elapsed)/1000)}S`:`${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}`;
+    pixelText(ctx,clock,160,7,p.light,1,'center');
     if(this.ready){ctx.fillStyle='#080e12b8';ctx.fillRect(69,73,182,51);pixelText(ctx,'READY?',160,85,p.pale,2,'center');pixelText(ctx,'PRESS A / START',160,108,p.light,1,'center');}
     ctx.restore();
   }

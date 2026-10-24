@@ -9,6 +9,7 @@ import { ASSET_REGISTRY } from '../src/assets/registry';
 import { ARCADE_FAMILIES } from '../src/events/arcade-types';
 import { PHYSICAL_DEFINITIONS } from '../src/events/arcade-physical';
 import { SKILL_DEFINITIONS } from '../src/events/arcade-skill';
+import { COMPLETION_DEFINITION } from '../src/events/completion-arcade';
 
 const allCommands = SYMBOLS.flatMap(a => SYMBOLS.flatMap(b => SYMBOLS.map(c => `${a}${b}${c}`)));
 const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -71,7 +72,10 @@ test('every collectible directly references its authored engine rules, controls,
     assert.equal(event.durationClass, 'minigame', event.eventId);
     assert.equal(event.sceneType, `arcade-${game.family}`, event.eventId);
     assert.equal(event.skippable, true, event.eventId);
-    assert.ok(Number.isSafeInteger(game.durationMs) && game.durationMs > 0 && game.durationMs <= 120_000, event.eventId);
+    assert.ok(Number.isSafeInteger(game.durationMs) && game.durationMs >= 0 && game.durationMs <= 120_000, event.eventId);
+    assert.ok(['endless','board','gag'].includes(game.playMode), event.eventId);
+    if (game.durationMs > 0) assert.equal(game.playMode, 'gag', `${event.eventId}: only an authored gag may force a timer`);
+    else assert.equal(game.durationMs, 0, `${event.eventId}: normal play has no forced timer`);
     assert.ok(game.rule.trim().length > 0, event.eventId);
     assert.ok(game.controls.trim().length > 0, event.eventId);
     assert.ok(game.title.trim().length >= 3, event.eventId);
@@ -84,8 +88,10 @@ test('the playable completion bonus remains separate from the 173 collection add
   assert.equal(TRUE_ENDING.eventId, 'true-ending');
   assert.equal(TRUE_ENDING.command, '');
   assert.equal(EVENT_BY_ID.has(TRUE_ENDING.eventId), false);
-  assert.equal(TRUE_ENDING.game, SKILL_DEFINITIONS.find(game => game.family === 'reaction' && game.variant === 0));
-  assert.equal(TRUE_ENDING.durationMs, TRUE_ENDING.game.durationMs);
+  assert.equal(TRUE_ENDING.game, COMPLETION_DEFINITION);
+  assert.equal(TRUE_ENDING.title, COMPLETION_DEFINITION.title);
+  assert.equal(TRUE_ENDING.durationMs, 0);
+  assert.equal(TRUE_ENDING.game.playMode, 'endless');
   assert.equal(TRUE_ENDING.category, 'minigame');
   assert.equal(TRUE_ENDING.skippable, true);
 });

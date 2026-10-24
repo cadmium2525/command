@@ -21,16 +21,17 @@ function virtualBrowser(){
   return {canvas,pending:()=>frames.size,step:(ms=100)=>{now+=ms;const batch=[...frames.values()];frames.clear();for(const callback of batch)callback(now);},restore:()=>{globalThis.requestAnimationFrame=request;globalThis.cancelAnimationFrame=cancel;}};
 }
 
-test('all 173 sessions and the separate completion bonus render, terminate once, and freeze their result',()=>{
+test('all 173 sessions and the completion remix render, allow explicit finish, and freeze once',()=>{
   const browser=virtualBrowser();
   try{for(const [i,event] of [...EVENTS,TRUE_ENDING].entries()){
     assert.ok(PALETTES[event.palette]);let completed=0,reported=0;
     const scene=new ScenePlayer(browser.canvas,event,{reducedMotion:i%2===0,onProgress:p=>{assert.ok(p>=reported&&p<=1);reported=p;},onComplete:()=>{completed++;}});
     assert.equal(scene.snapshot.phase,'ready');scene.input('START');
-    for(let frame=0;frame<Math.ceil(event.durationMs/100)+10&&!scene.isComplete;frame++){
+    for(let frame=0;frame<60&&!scene.isComplete;frame++){
       if(frame%7===0)scene.input((['L','R','A','D','B','U'] as const)[frame%6]);
       browser.step();
     }
+    if(!scene.isComplete)scene.reveal();
     assert.equal(completed,1,event.eventId);assert.equal(reported,1);assert.equal(browser.pending(),0);
     const result=scene.snapshot;scene.input('A');browser.step();assert.deepEqual(scene.snapshot,result);
     assert.equal(completed,1);scene.dispose();assert.equal(browser.pending(),0);
@@ -54,5 +55,18 @@ test('ending early produces a frozen result and cannot be used to seek the game 
     scene.nextBeat();scene.previousBeat();assert.equal(scene.progress,0);scene.input('START');scene.reveal();
     assert.equal(scene.isComplete,true);assert.ok(scene.result);assert.equal(scene.progress,1);assert.equal(completed,1);assert.equal(browser.pending(),0);
     scene.reveal();scene.pause(false);browser.step();assert.equal(completed,1);assert.equal(browser.pending(),0);scene.dispose();
+  }finally{browser.restore();}
+});
+
+
+test('an untimed scene stays playable past a minute and reports elapsed time rather than a deadline',()=>{
+  const browser=virtualBrowser();
+  try{const event=EVENTS.find(e=>e.game.family==='fishing'&&e.game.variant===1)!;
+    assert.equal(event.durationMs,0);let completed=0;
+    const scene=new ScenePlayer(browser.canvas,event,{reducedMotion:true,onComplete:()=>{completed++;}});
+    scene.input('START');for(let i=0;i<620;i++)browser.step();
+    assert.equal(scene.isComplete,false);assert.equal(completed,0);assert.equal(scene.progress,0);
+    assert.ok(Number(browser.canvas.dataset.elapsed)>=60000);assert.equal(browser.canvas.dataset.playMode,'endless');
+    scene.reveal();assert.equal(scene.result?.status,'stopped');assert.equal(completed,1);scene.dispose();
   }finally{browser.restore();}
 });

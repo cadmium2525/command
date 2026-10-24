@@ -16,18 +16,16 @@ test('92 physical definitions contain the agreed nine families, explicit rules a
     const rows=PHYSICAL_DEFINITIONS.filter(d=>d.family===family);
     assert.deepEqual(rows.map(d=>d.variant),Array.from({length:count},(_,i)=>i));
     assert.equal(new Set(rows.map(d=>d.rule)).size,count);
-    for(const row of rows){assert.ok(row.rule.length>=12);assert.ok(row.controls.length>5);assert.ok(row.durationMs>=8000&&row.durationMs<=30000);}
+    for(const row of rows){assert.ok(row.rule.length>=12);assert.ok(row.controls.length>5);assert.equal(row.durationMs,0);assert.ok(['endless','board','gag'].includes(row.playMode));}
   }
 });
 
-test('all 92 physical games naturally finish, draw finite geometry and freeze after their outcome',()=>{
+test('all 92 physical games draw finite geometry through prolonged play and freeze only after a real outcome',()=>{
   for(const def of PHYSICAL_DEFINITIONS){
     const game=createPhysicalGame(def,216);game.draw(context,PALETTES.midnight,false);
-    for(let frame=0;frame<def.durationMs/100+5&&!game.outcome;frame++){game.update(.1);if(frame%25===0)game.draw(context,PALETTES.midnight,true);}
-    assert.ok(game.outcome,`${def.family}-${def.variant} naturally finishes`);
+    for(let frame=0;frame<600&&!game.outcome;frame++){game.update(.1);if(frame%25===0)game.draw(context,PALETTES.midnight,true);}
     assert.ok(Number.isFinite(game.score)&&game.score>=0);
-    const before=JSON.stringify(game.snapshot);for(const key of ['L','R','U','D','A','B'] as InputSymbol[])game.input(key);game.update(1);game.draw(context,PALETTES.midnight,false);
-    assert.equal(JSON.stringify(game.snapshot),before,`${def.family}-${def.variant} stops at its result`);
+    if(game.outcome){const before=JSON.stringify(game.snapshot);for(const key of ['L','R','U','D','A','B'] as InputSymbol[])game.input(key);game.update(1);game.draw(context,PALETTES.midnight,false);assert.equal(JSON.stringify(game.snapshot),before,`${def.family}-${def.variant} stops at its result`);}
   }
 });
 
@@ -35,7 +33,7 @@ test('all physical variants are deterministic under the same controls and keep i
   const keys:InputSymbol[]=['A','R','U','B','L','D'];
   for(const def of PHYSICAL_DEFINITIONS){
     const first=createPhysicalGame(def,73),second=createPhysicalGame(def,73);
-    for(let frame=0;frame<Math.min(500,def.durationMs/20);frame++){if(frame%7===0){const key=keys[Math.floor(frame/7)%keys.length];first.input(key);second.input(key);}first.update(.02);second.update(.02);}
+    for(let frame=0;frame<500;frame++){if(frame%7===0){const key=keys[Math.floor(frame/7)%keys.length];first.input(key);second.input(key);}first.update(.02);second.update(.02);}
     assert.deepEqual(first.snapshot,second.snapshot,`${def.family}-${def.variant}`);
     const saved=JSON.stringify(second.snapshot);first.input('A');first.update(.1);assert.equal(JSON.stringify(second.snapshot),saved);
   }
@@ -67,7 +65,7 @@ test('normal falling blocks rotate, collide, lock and clear a row through actual
   const game=new BlocksArcade(definition('blocks'),3943);
   for(const key of 'RRRBLLLLBULLBRB')game.input(key as InputSymbol);
   assert.equal(game.snapshot.pieces,4);assert.equal(game.snapshot.lines,1);
-  assert.equal(game.outcome?.status,'win');assert.ok(game.score>=100);
+  assert.equal(game.outcome,null,'the first cleared row continues into the next piece');assert.ok(game.score>=100);
   assert.equal(game.snapshot.board.flat().filter(Boolean).length,6);
   const bar=new BlocksArcade(definition('blocks',4),3);bar.input('A');for(let i=0;i<20;i++)bar.input('L');
   assert.equal(new Set(bar.snapshot.active.map(([x])=>x)).size,1,'bar rotates upright');
@@ -83,20 +81,20 @@ test('block twists change controls, gravity, cell size, rotation and the clearin
   const broken=new BlocksArcade(definition('blocks',9),104),before=broken.snapshot.active;broken.input('A');assert.deepEqual(broken.snapshot.active,before);
   const tolerant=new BlocksArcade(definition('blocks',10),104),strict=new BlocksArcade(definition('blocks',0),104);
   for(const game of [tolerant,strict])for(const key of 'LLLBRBURRRRB')game.input(key as InputSymbol);
-  assert.equal(tolerant.outcome?.status,'win','a row with one hole clears only in the lenient variant');assert.equal(strict.outcome,null);assert.equal(strict.snapshot.board[15].filter(Boolean).length,9);
+  assert.equal(tolerant.snapshot.lines,1,'a row with one hole clears only in the lenient variant');assert.equal(tolerant.outcome,null);assert.equal(strict.snapshot.lines,0);assert.equal(strict.snapshot.board[15].filter(Boolean).length,9);
   const rising=new BlocksArcade(definition('blocks',12),4);advance(rising,3.6);assert.equal(rising.snapshot.board[15].filter(Boolean).length,9,'new garbage has one real gap');
 });
 
-function aimInvaders(game:InvadersArcade){
-  for(let frame=0;frame<30*60&&!game.outcome;frame++){
-    const state=game.snapshot,target=[...state.enemies].sort((a,b)=>Math.abs(a.x-state.x)-Math.abs(b.x-state.x))[0];
-    if(target){const speed=game.def.variant===1?24:20,aim=target.x+speed*(177-target.y)/205;if(Math.abs(aim-state.x)>7)game.input(aim<state.x?'L':'R');game.input('A');game.input('B');}
+function aimInvaders(game:InvadersArcade,stopAtKills=Infinity){
+  for(let frame=0;frame<90*60&&!game.outcome&&game.snapshot.kills<stopAtKills;frame++){
+    const state=game.snapshot,target=state.enemies.filter(a=>!state.enemies.some(b=>b.id%7===a.id%7&&b.y>a.y)).sort((a,b)=>Math.abs(a.x-state.x)-Math.abs(b.x-state.x))[0];
+    if(target){const aim=target.x+state.direction*state.speed*(177-target.y)/205;if(Math.abs(aim-state.x)>7)game.input(aim<state.x?'L':'R');game.input('A');game.input('B');}
     game.update(1/60);
   }
 }
 
 test('invader shots remove enemies, while the enormous variant takes twelve hits to defeat',()=>{
-  const normal=new InvadersArcade(definition('invaders'),216);aimInvaders(normal);assert.equal(normal.outcome?.status,'win');assert.ok(normal.snapshot.kills>=8);
+  const normal=new InvadersArcade(definition('invaders'),216);aimInvaders(normal,8);assert.equal(normal.outcome,null,'eight kills no longer end a full board');assert.ok(normal.snapshot.enemies.length>0);aimInvaders(normal);assert.equal(normal.snapshot.outcome?.status,'win');assert.equal(normal.snapshot.kills,21);assert.equal(normal.snapshot.enemies.length,0);
   const giant=new InvadersArcade(definition('invaders',1),216);assert.equal(giant.snapshot.enemies.length,1);assert.ok(giant.snapshot.enemies[0].w>120);assert.equal(giant.snapshot.enemies[0].hp,12);
   aimInvaders(giant);assert.equal(giant.outcome?.status,'win');assert.equal(giant.score,120);assert.equal(giant.snapshot.enemies.length,0);
 });
@@ -120,11 +118,11 @@ test('snake food changes the body, wraps at the boundary, and follows its stated
   const moving=new SnakeArcade(definition('snake',5),3),food=moving.snapshot.food;moving.input('B');advance(moving,1.45);assert.notDeepEqual(moving.snapshot.food,food);
 });
 
-function playBreakout(game:BreakoutArcade){
-  for(let frame=0;frame<30*60&&!game.outcome;frame++){
+function playBreakout(game:BreakoutArcade,stopAt=Infinity){
+  for(let frame=0;frame<300*60&&!game.outcome&&game.snapshot.destroyed<stopAt;frame++){
     const state=game.snapshot,ball=[...state.balls].sort((a,b)=>b.y-a.y)[0];
     if(ball){let aim=ball.x;if(ball.vy>0){aim=ball.x+ball.vx*(183-ball.y-ball.r)/ball.vy;while(aim<8||aim>312)aim=aim<8?16-aim:624-aim;}
-      if(Math.abs(aim-state.x)>7)game.input((aim<state.x)!==(game.def.variant===4)?'L':'R');}
+      aim+=state.destroyed%4<2?-12:12;if(Math.abs(aim-state.x)>7)game.input((aim<state.x)!==(game.def.variant===4)?'L':'R');}
     game.input('A');game.update(1/60);
   }
 }
@@ -132,7 +130,7 @@ function playBreakout(game:BreakoutArcade){
 test('breakout ball hits remove bricks and the paddle can finish an actual round',()=>{
   const game=new BreakoutArcade(definition('breakout'),3);assert.equal(game.snapshot.launched,false);game.input('A');advance(game,.8);
   assert.ok(game.snapshot.balls[0].y<172,'serve launches upward');
-  playBreakout(game);assert.equal(game.outcome?.status,'win');assert.ok(game.snapshot.destroyed>=6);assert.ok(game.score>=60);
+  playBreakout(game,6);assert.ok(game.snapshot.destroyed>=6);assert.equal(game.outcome,null,'six broken bricks no longer end the board');playBreakout(game);assert.equal(game.snapshot.outcome?.status,'win');assert.equal(game.snapshot.destroyed,27);assert.ok(game.score>=270);
 });
 
 test('breakout twists alter paddle, giant ball, durable bricks, gravity and a genuinely moving row',()=>{
@@ -165,7 +163,7 @@ test('runner jumping clears obstacles while ceiling obstacles actually require d
   }
   assert.equal(game.outcome?.status,'win');assert.equal(game.snapshot.lives,3);
   const stand=new RunnerArcade(definition('runner',6),3);advance(stand,4);assert.ok(stand.snapshot.lives<3,'standing meets the overhead beam');
-  const duck=new RunnerArcade(definition('runner',6),3);for(let frame=0;frame<20*60&&!duck.outcome;frame++){duck.input('D');duck.update(1/60);}assert.equal(duck.outcome?.status,'win');assert.equal(duck.snapshot.lives,3);
+  const duck=new RunnerArcade(definition('runner',6),3);for(let frame=0;frame<60*60&&!duck.outcome;frame++){duck.input('D');duck.update(1/60);}assert.equal(duck.outcome,null);assert.equal(duck.snapshot.lives,3);assert.ok(duck.snapshot.cleared>20);assert.ok(duck.snapshot.elapsed>59);assert.ok(duck.snapshot.level>1);assert.ok(duck.snapshot.speed>124);
 });
 
 test('runner gravity, double jumps, holes, opposite approach and time stop affect physical state',()=>{
@@ -195,14 +193,15 @@ function playCatch(game:CatchArcade){
   }
 }
 
-test('catch games can be won by tracking real falling items and matching their shape',()=>{
-  for(const variant of [0,3,5,6,7,8]){const game=new CatchArcade(definition('catch',variant),3);playCatch(game);assert.equal(game.outcome?.status,'win',`variant ${variant}`);assert.ok(game.snapshot.caught>=3);if(variant===8)assert.ok(game.snapshot.width<42);}
+test('catch keeps its five-star gag while other variants continue collecting beyond their old quotas',()=>{
+  for(const variant of [0,3,5,6,7,8]){const game=new CatchArcade(definition('catch',variant),3);playCatch(game);assert.equal(game.outcome?.status,variant===0?'win':undefined,`variant ${variant}`);assert.ok(game.snapshot.caught>=3);if(variant!==0){assert.ok(game.snapshot.caught>10);assert.ok(game.snapshot.elapsed>24);assert.ok(game.snapshot.level>1);assert.ok(game.snapshot.speed>82);}if(variant===8)assert.ok(game.snapshot.width<42);}
   const bombs=new CatchArcade(definition('catch',1),3);advance(bombs,1.4);assert.ok(bombs.snapshot.items.some(i=>i.bad));
   const wind=new CatchArcade(definition('catch',2),3);advance(wind,.1);assert.ok(wind.snapshot.items.some(i=>i.vx!==0));
 });
 
 function followMaze(game:MazeArcade){
-  for(let step=0;step<200&&!game.outcome;step++){
+  const target=game.snapshot.boardsCleared+1;
+  for(let step=0;step<200&&!game.outcome&&game.snapshot.boardsCleared<target;step++){
     const state=game.snapshot,next=state.route[1];if(!next)break;let dx=next.x-state.x,dy=next.y-state.y;
     if(game.def.variant===1)dx*=-1;
     if(game.def.variant===4)for(let i=0;i<state.rotation;i++){const old=dx;dx=dy;dy=-old;}
@@ -210,9 +209,9 @@ function followMaze(game:MazeArcade){
   }
 }
 
-test('all nine maze variants have a reachable exit, including sliding, key and rotating controls',()=>{
+test('all nine maze exits lead to another playable board, including sliding, key and rotating controls',()=>{
   for(let variant=0;variant<9;variant++){
-    const game=new MazeArcade(definition('maze',variant),73);if(variant===4||variant===6)advance(game,3.1);followMaze(game);assert.equal(game.outcome?.status,'win',`variant ${variant}`);if(variant===5)assert.equal(game.snapshot.hasKey,true);
+    const game=new MazeArcade(definition('maze',variant),73);if(variant===4||variant===6)advance(game,3.1);followMaze(game);assert.equal(game.outcome,null,`variant ${variant}`);assert.equal(game.snapshot.boardsCleared,1);if(variant===5)assert.equal(game.snapshot.keysCollected,1);followMaze(game);assert.equal(game.snapshot.boardsCleared,2);assert.equal(game.snapshot.level,3);assert.ok(game.snapshot.route.length>1);
   }
 });
 
@@ -236,4 +235,76 @@ test('an incoming ball returned with A counts once and strong shots can complete
     game.update(1/120);
   }
   assert.equal(testedRepeat,true);assert.equal(game.outcome?.status,'win');assert.equal(game.snapshot.returns,5);assert.ok(game.score>=50);
+});
+
+test('blocks continue through multiple cleared rows and increase gravity with cumulative lines',()=>{
+  const game=new BlocksArcade(definition('blocks',3),9),initialInterval=game.snapshot.fallInterval;
+  for(let rowPair=0;rowPair<4;rowPair++)for(const target of [0,2,4,6,8]){
+    const left=Math.min(...game.snapshot.active.map(([x])=>x));
+    for(let step=0;step<Math.abs(target-left);step++)game.input(target<left?'L':'R');
+    game.input('B');assert.equal(game.outcome,null);
+  }
+  assert.equal(game.snapshot.lines,8);assert.equal(game.snapshot.pieces,20);assert.equal(game.snapshot.level,2);assert.ok(game.snapshot.fallInterval<initialInterval);
+  assert.ok(game.snapshot.board.flat().every(v=>v===0),'multiple full boards clear without ending the run');
+});
+
+function feedSnake(game:SnakeArcade,target:number){
+  for(let step=0;step<3000&&!game.outcome&&game.snapshot.eaten<target;step++){
+    const state=game.snapshot,head=state.body[0],food=state.food[0],queue=[head],previous=new Map<string,{point:{x:number;y:number};key:InputSymbol}|null>([[`${head.x},${head.y}`,null]]);
+    for(let i=0;i<queue.length;i++){
+      const current=queue[i];if(current.x===food.x&&current.y===food.y)break;
+      for(const [dx,dy,key] of [[1,0,'R'],[0,1,'D'],[-1,0,'L'],[0,-1,'U']] as const){const next={x:current.x+dx,y:current.y+dy},id=`${next.x},${next.y}`;
+        if((i===0&&dx===-state.direction.x&&dy===-state.direction.y)||next.x<0||next.x>=24||next.y<0||next.y>=13||previous.has(id)||[...state.body.slice(0,-1),...state.walls,...state.poison].some(p=>p.x===next.x&&p.y===next.y))continue;
+        previous.set(id,{point:current,key});queue.push(next);
+      }
+    }
+    assert.ok(previous.has(`${food.x},${food.y}`),'food is reachable');
+    let point=food,key:InputSymbol='R';while(true){const item=previous.get(`${point.x},${point.y}`);if(!item)break;key=item.key;if(item.point.x===head.x&&item.point.y===head.y)break;point=item.point;}
+    game.input(key);game.input('A');
+  }
+}
+
+test('only snake title gags stop at their promised amount while normal feeding keeps going and accelerates',()=>{
+  const endless=new SnakeArcade(definition('snake',1),31);feedSnake(endless,10);assert.equal(endless.snapshot.eaten,10);assert.equal(endless.outcome,null);assert.equal(endless.snapshot.body.length,3);assert.ok(endless.snapshot.level>1);assert.ok(endless.snapshot.interval<.17);
+  const gag=new SnakeArcade(definition('snake'),31);feedSnake(gag,10);assert.equal(gag.snapshot.eaten,3);assert.equal(gag.outcome?.status,'win');
+  const shrinking=new SnakeArcade(definition('snake',2),31);feedSnake(shrinking,10);assert.equal(shrinking.snapshot.body.length,1);assert.equal(shrinking.outcome?.status,'win');
+  const wrap=new SnakeArcade(definition('snake',3),31);advance(wrap,40);assert.equal(wrap.outcome,null);assert.ok(wrap.snapshot.elapsed>39);assert.ok(wrap.snapshot.level>1);
+});
+
+test('endless pong and dodge survive far beyond the former time limits and increase difficulty',()=>{
+  const pong=new PongArcade(definition('pong',2),3);
+  for(let frame=0;frame<65*60&&!pong.outcome;frame++){
+    const state=pong.snapshot,ball=[...state.balls].sort((a,b)=>a.x-b.x)[0];if(Math.abs(ball.y-state.y)>7)pong.input(ball.y<state.y?'U':'D');pong.input('A');pong.update(1/60);
+  }
+  assert.equal(pong.outcome,null);assert.ok(pong.snapshot.elapsed>64);assert.ok(pong.snapshot.returns>10);assert.ok(pong.snapshot.level>1);
+  const dodge=new DodgeArcade(definition('dodge',9),31);
+  for(let frame=0;frame<75*60&&!dodge.outcome;frame++){
+    const state=dodge.snapshot,dx=state.zone.x+state.zone.w/2-state.x,dy=state.zone.y+state.zone.h/2-state.y;
+    if(Math.abs(dx)>7)dodge.input(dx<0?'L':'R');else if(Math.abs(dy)>7)dodge.input(dy<0?'U':'D');dodge.update(1/60);
+  }
+  assert.equal(dodge.outcome,null);assert.ok(dodge.snapshot.elapsed>74);assert.equal(dodge.snapshot.level,4);assert.ok(dodge.score>500);
+});
+
+test('maze has no general timer and adds pursuit on the third board instead of ending at an exit',()=>{
+  const game=new MazeArcade(definition('maze'),31);advance(game,40);assert.equal(game.outcome,null);assert.ok(game.snapshot.elapsed>39);
+  followMaze(game);followMaze(game);assert.equal(game.snapshot.boardsCleared,2);assert.equal(game.outcome,null);assert.equal(game.snapshot.pursuerActive,false);
+  advance(game,4.1);assert.equal(game.snapshot.outcome?.status,'lose','waiting at the next entrance lets the new pursuer catch up');
+});
+
+test('block gravity also speeds up with elapsed time while the line count stays unchanged',()=>{
+  const game=new BlocksArcade(definition('blocks',3),9);
+  // Slow, safe placement keeps the run alive until just before the timed level increase.
+  for(let piece=0;piece<10;piece++){
+    const target=[0,2,4,6,8][piece%5],left=Math.min(...game.snapshot.active.map(([x])=>x));
+    for(let move=0;move<Math.abs(target-left);move++)game.input(target<left?'L':'R');
+    advance(game,2.98);game.input('B');assert.equal(game.outcome,null);
+  }
+  const before=game.snapshot;assert.ok(before.elapsed<30&&before.elapsed>29);assert.equal(before.lines,4);
+  advance(game,.3);
+  const after=game.snapshot;assert.equal(after.lines,before.lines);assert.ok(after.elapsed>30);assert.equal(after.level,before.level+1);assert.ok(after.fallInterval<before.fallInterval,'elapsed time directly shortens the fall interval');
+});
+
+test('sliding mazes change their board after an exit and wall-break allowance remains three on later boards',()=>{
+  const sliding=new MazeArcade(definition('maze',2),31),first=sliding.snapshot.grid;followMaze(sliding);assert.equal(sliding.snapshot.boardsCleared,1);assert.notDeepEqual(sliding.snapshot.grid,first);followMaze(sliding);assert.equal(sliding.snapshot.boardsCleared,2);
+  const breaking=new MazeArcade(definition('maze',7),31);for(let board=0;board<7;board++){followMaze(breaking);assert.equal(breaking.snapshot.charges,3);assert.equal(breaking.outcome,null);}
 });
